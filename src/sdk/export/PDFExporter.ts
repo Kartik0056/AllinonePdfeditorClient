@@ -268,6 +268,30 @@ export class PDFExporter {
     }
 
     page.drawText(element.text, drawOptions);
+
+    if (element.textDecoration === 'underline') {
+      try {
+        const textWidth = font.widthOfTextAtSize(element.text, element.fontSize);
+        page.drawLine({
+          start: { x: element.x, y: pdfY - 2 },
+          end: { x: element.x + textWidth, y: pdfY - 2 },
+          thickness: Math.max(1, element.fontSize * 0.08),
+          color: rgb(color.r, color.g, color.b),
+          opacity: element.opacity,
+        });
+      } catch {}
+    } else if (element.textDecoration === 'line-through') {
+      try {
+        const textWidth = font.widthOfTextAtSize(element.text, element.fontSize);
+        page.drawLine({
+          start: { x: element.x, y: pdfY + element.fontSize * 0.35 },
+          end: { x: element.x + textWidth, y: pdfY + element.fontSize * 0.35 },
+          thickness: Math.max(1, element.fontSize * 0.08),
+          color: rgb(color.r, color.g, color.b),
+          opacity: element.opacity,
+        });
+      } catch {}
+    }
   }
 
   /**

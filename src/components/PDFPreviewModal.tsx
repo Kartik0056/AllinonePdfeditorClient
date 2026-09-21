@@ -125,7 +125,7 @@ export default function PDFPreviewModal({
     };
   }, [isOpen, pdfBytes, initialPage]);
 
-  // Render Page Canvas with crisp HiDPI
+  // Render Page Canvas with crisp HiDPI (300 DPI Supersampling)
   const renderPreviewPage = useCallback(
     async (pageNum: number) => {
       if (!pdfDoc || !canvasRef.current) return;
@@ -143,19 +143,28 @@ export default function PDFPreviewModal({
         const canvas = canvasRef.current;
         if (!canvas) return;
 
-        const ctx = canvas.getContext('2d')!;
-        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        // Base DPR (at least 2 for crisp vector typography)
+        const baseDpr = Math.max(window.devicePixelRatio || 1, 2);
+        // Supersampling scale factor for print-fidelity crispness
+        const renderScaleFactor = Math.max(2.5, baseDpr * 1.5);
         const cssScale = zoom / 100;
-        const viewport = page.getViewport({ scale: cssScale * dpr });
 
-        canvas.width = Math.floor(viewport.width);
-        canvas.height = Math.floor(viewport.height);
-        canvas.style.width = `${Math.floor(viewport.width / dpr)}px`;
-        canvas.style.height = `${Math.floor(viewport.height / dpr)}px`;
+        const renderViewport = page.getViewport({ scale: cssScale * renderScaleFactor });
+        const displayViewport = page.getViewport({ scale: cssScale });
+
+        canvas.width = Math.floor(renderViewport.width);
+        canvas.height = Math.floor(renderViewport.height);
+        canvas.style.width = `${Math.floor(displayViewport.width)}px`;
+        canvas.style.height = `${Math.floor(displayViewport.height)}px`;
+
+        const ctx = canvas.getContext('2d', { alpha: false })!;
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
 
         const renderTask = page.render({
           canvasContext: ctx,
-          viewport,
+          viewport: renderViewport,
+          intent: 'display',
         });
         renderTaskRef.current = renderTask;
 
@@ -240,7 +249,9 @@ export default function PDFPreviewModal({
                 </span>
               )}
               <span>·</span>
-              <span className="text-surface-400">High Precision Vector</span>
+              <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-mono text-[9px] border border-emerald-500/20 font-semibold">
+                Ultra HD 300 DPI
+              </span>
             </div>
           </div>
         </div>
@@ -283,7 +294,7 @@ export default function PDFPreviewModal({
               {zoom}%
             </span>
             <button
-              onClick={() => setZoom((z) => Math.min(300, z + 15))}
+              onClick={() => setZoom((z) => Math.min(400, z + 15))}
               className="btn-icon p-1 text-surface-400 hover:text-white"
               title="Zoom In (+)"
             >

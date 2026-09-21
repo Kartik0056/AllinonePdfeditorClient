@@ -13,7 +13,7 @@ import {
   PenTool, Highlighter, Square, Minus, Circle, ArrowUpRight,
   Eraser, Stamp, StickyNote, Search, PanelLeftClose, PanelLeftOpen,
   Trash2, Copy, Plus, X, MoveUp, MoveDown, Check, Sparkles,
-  Move, RotateCcw, Hand, Eye
+  Move, RotateCcw, Hand, Eye, Underline as UnderlineIcon, Strikethrough as StrikeIcon
 } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import PDFPreviewModal from '../components/PDFPreviewModal';
@@ -232,19 +232,26 @@ export default function EditorPage() {
     try {
       const page = await pdfDocRef.current.getPage(pageNum);
       const currentZoom = useEditorStore.getState().zoom;
-      const scale = (currentZoom / 100) * 1.5; // 1.5x for retina sharpness
-      const viewport = page.getViewport({ scale });
+      const baseDpr = Math.max(window.devicePixelRatio || 1, 2);
+      const qualityMultiplier = Math.max(2.5, baseDpr * 1.5);
+      const cssScale = currentZoom / 100;
 
-      const ctx = canvas.getContext('2d')!;
+      const renderViewport = page.getViewport({ scale: cssScale * qualityMultiplier });
+      const displayViewport = page.getViewport({ scale: cssScale });
 
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
-      canvas.style.width = `${viewport.width / 1.5}px`;
-      canvas.style.height = `${viewport.height / 1.5}px`;
+      const ctx = canvas.getContext('2d', { alpha: false })!;
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+
+      canvas.width = Math.floor(renderViewport.width);
+      canvas.height = Math.floor(renderViewport.height);
+      canvas.style.width = `${Math.floor(displayViewport.width)}px`;
+      canvas.style.height = `${Math.floor(displayViewport.height)}px`;
 
       const renderTask = page.render({
         canvasContext: ctx,
-        viewport,
+        viewport: renderViewport,
+        intent: 'display',
       });
       activeRenderTaskRef.current = renderTask;
 
@@ -364,8 +371,20 @@ export default function EditorPage() {
     }
 
     const editor = getEditor();
+    const currentElements = editor.getElements(store.currentPage);
 
     if (store.activeTool === 'highlight') {
+      const existing = currentElements.find(
+        (a) => a.type === 'annotation' &&
+               (a as AnnotationElement).annotationType === 'highlight' &&
+               Math.abs(a.x - (el.x - 1)) < 20 &&
+               Math.abs(a.y - (el.y - 1)) < 20
+      );
+      if (existing) {
+        editor.deleteElement(existing.id);
+        refreshPageElements(store.currentPage);
+        return;
+      }
       editor.addHighlight(
         store.currentPage,
         el.x - 1,
@@ -379,6 +398,20 @@ export default function EditorPage() {
     }
 
     if (store.activeTool === 'underline') {
+      const existing = currentElements.find(
+        (a) => a.type === 'annotation' &&
+               (a as AnnotationElement).annotationType === 'underline' &&
+               Math.abs(a.x - el.x) < 25 &&
+               Math.abs(a.y - (el.y + el.height - 2)) < 25
+      );
+      if (existing || el.textDecoration === 'underline') {
+        if (existing) editor.deleteElement(existing.id);
+        if (el.textDecoration === 'underline') {
+          editor.editText(el.id, { textDecoration: 'none' });
+        }
+        refreshPageElements(store.currentPage);
+        return;
+      }
       editor.addUnderline(
         store.currentPage,
         el.x,
@@ -391,6 +424,20 @@ export default function EditorPage() {
     }
 
     if (store.activeTool === 'strikethrough') {
+      const existing = currentElements.find(
+        (a) => a.type === 'annotation' &&
+               (a as AnnotationElement).annotationType === 'strikethrough' &&
+               Math.abs(a.x - el.x) < 25 &&
+               Math.abs(a.y - el.y) < 25
+      );
+      if (existing || el.textDecoration === 'line-through') {
+        if (existing) editor.deleteElement(existing.id);
+        if (el.textDecoration === 'line-through') {
+          editor.editText(el.id, { textDecoration: 'none' });
+        }
+        refreshPageElements(store.currentPage);
+        return;
+      }
       editor.addStrikethrough(
         store.currentPage,
         el.x,
@@ -438,6 +485,7 @@ export default function EditorPage() {
         fontFamily: currentEl.fontFamily,
         fontWeight: currentEl.fontWeight,
         fontStyle: (currentEl as any).fontStyle,
+        textDecoration: currentEl.textDecoration,
         color: currentEl.color,
       });
       refreshPageElements(store.currentPage);
@@ -456,6 +504,83 @@ export default function EditorPage() {
     const updated = editor.getElement(id);
     if (updated) setSelectedElement(updated);
   }, [store.currentPage, refreshPageElements]);
+
+  // Toggle Underline on text element on-demand (removes without undo if already present)
+  const handleToggleUnderline = useCallback((targetTxt: TextElement) => {
+    const editor = getEditor();
+    const currentElements = editor.getElements(store.currentPage);
+    const matchedUnderlines = currentElements.filter(
+      (a) => a.type === 'annotation' &&
+             (a as AnnotationElement).annotationType === 'underline' &&
+             Math.abs(a.x - targetTxt.x) < 25 &&
+             Math.abs(a.y - (targetTxt.y + targetTxt.height - 2)) < 25
+    );
+
+    if (matchedUnderlines.length > 0 || targetTxt.textDecoration === 'underline') {
+      matchedUnderlines.forEach((u) => editor.deleteElement(u.id));
+      handleUpdateTextProps(targetTxt.id, { textDecoration: 'none' });
+    } else {
+      editor.addUnderline(
+        store.currentPage,
+        targetTxt.x,
+        targetTxt.y + targetTxt.height - 2,
+        targetTxt.width,
+        targetTxt.color || '#f43f5e'
+      );
+      handleUpdateTextProps(targetTxt.id, { textDecoration: 'underline' });
+    }
+    refreshPageElements(store.currentPage);
+  }, [store.currentPage, handleUpdateTextProps, refreshPageElements]);
+
+  // Toggle Strikethrough on text element on-demand
+  const handleToggleStrikethrough = useCallback((targetTxt: TextElement) => {
+    const editor = getEditor();
+    const currentElements = editor.getElements(store.currentPage);
+    const matchedStrikes = currentElements.filter(
+      (a) => a.type === 'annotation' &&
+             (a as AnnotationElement).annotationType === 'strikethrough' &&
+             Math.abs(a.x - targetTxt.x) < 25 &&
+             Math.abs(a.y - targetTxt.y) < 25
+    );
+
+    if (matchedStrikes.length > 0 || targetTxt.textDecoration === 'line-through') {
+      matchedStrikes.forEach((s) => editor.deleteElement(s.id));
+      handleUpdateTextProps(targetTxt.id, { textDecoration: 'none' });
+    } else {
+      editor.addStrikethrough(
+        store.currentPage,
+        targetTxt.x,
+        targetTxt.y,
+        targetTxt.width,
+        targetTxt.height,
+        targetTxt.color || '#f43f5e'
+      );
+      handleUpdateTextProps(targetTxt.id, { textDecoration: 'line-through' });
+    }
+    refreshPageElements(store.currentPage);
+  }, [store.currentPage, handleUpdateTextProps, refreshPageElements]);
+
+  // Clear all custom formatting & decorations on text element
+  const handleClearAllStyles = useCallback((targetTxt: TextElement) => {
+    const editor = getEditor();
+    const currentElements = editor.getElements(store.currentPage);
+
+    const overlapping = currentElements.filter(
+      (a) => a.type === 'annotation' &&
+             Math.abs(a.x - targetTxt.x) < Math.max(targetTxt.width, 30) &&
+             Math.abs(a.y - targetTxt.y) < Math.max(targetTxt.height + 10, 30)
+    );
+    overlapping.forEach((ann) => editor.deleteElement(ann.id));
+
+    handleUpdateTextProps(targetTxt.id, {
+      fontWeight: 'normal',
+      fontStyle: 'normal',
+      textDecoration: 'none',
+      color: '#000000',
+    });
+
+    refreshPageElements(store.currentPage);
+  }, [store.currentPage, handleUpdateTextProps, refreshPageElements]);
 
   // ─── Interactive Element Drag & Resize Handlers ─────────
 
@@ -698,35 +823,69 @@ export default function EditorPage() {
         ) as TextElement[];
 
         if (textElements.length > 0) {
-          textElements.forEach((txt) => {
-            if (store.activeTool === 'highlight') {
-              editor.addHighlight(
-                store.currentPage,
-                txt.x - 1,
-                txt.y - 1,
-                txt.width + 2,
-                txt.height + 2,
-                store.fillColor !== 'transparent' ? store.fillColor : '#fde047'
-              );
-            } else if (store.activeTool === 'underline') {
-              editor.addUnderline(
-                store.currentPage,
-                txt.x,
-                txt.y + txt.height - 2,
-                txt.width,
-                store.strokeColor || '#f43f5e'
-              );
-            } else if (store.activeTool === 'strikethrough') {
-              editor.addStrikethrough(
-                store.currentPage,
-                txt.x,
-                txt.y,
-                txt.width,
-                txt.height,
-                store.strokeColor || '#f43f5e'
-              );
-            }
-          });
+          const isUnderline = store.activeTool === 'underline';
+          const isStrike = store.activeTool === 'strikethrough';
+          const isHighlight = store.activeTool === 'highlight';
+
+          // Check if all selected elements already have this annotation
+          const allHaveIt = isUnderline
+            ? textElements.every((txt) => currentElements.some((a) => a.type === 'annotation' && (a as AnnotationElement).annotationType === 'underline' && Math.abs(a.x - txt.x) < 25 && Math.abs(a.y - (txt.y + txt.height - 2)) < 25))
+            : isStrike
+            ? textElements.every((txt) => currentElements.some((a) => a.type === 'annotation' && (a as AnnotationElement).annotationType === 'strikethrough' && Math.abs(a.x - txt.x) < 25 && Math.abs(a.y - txt.y) < 25))
+            : isHighlight
+            ? textElements.every((txt) => currentElements.some((a) => a.type === 'annotation' && (a as AnnotationElement).annotationType === 'highlight' && Math.abs(a.x - txt.x) < 20 && Math.abs(a.y - txt.y) < 20))
+            : false;
+
+          if (allHaveIt) {
+            // TOGGLE OFF: remove from all selected elements!
+            textElements.forEach((txt) => {
+              const matched = currentElements.filter((a) => {
+                if (a.type !== 'annotation') return false;
+                const ann = a as AnnotationElement;
+                if (isUnderline && ann.annotationType === 'underline') {
+                  return Math.abs(ann.x - txt.x) < 25 && Math.abs(ann.y - (txt.y + txt.height - 2)) < 25;
+                }
+                if (isStrike && ann.annotationType === 'strikethrough') {
+                  return Math.abs(ann.x - txt.x) < 25 && Math.abs(ann.y - txt.y) < 25;
+                }
+                if (isHighlight && ann.annotationType === 'highlight') {
+                  return Math.abs(ann.x - txt.x) < 20 && Math.abs(ann.y - txt.y) < 20;
+                }
+                return false;
+              });
+              matched.forEach((m) => editor.deleteElement(m.id));
+            });
+          } else {
+            textElements.forEach((txt) => {
+              if (store.activeTool === 'highlight') {
+                editor.addHighlight(
+                  store.currentPage,
+                  txt.x - 1,
+                  txt.y - 1,
+                  txt.width + 2,
+                  txt.height + 2,
+                  store.fillColor !== 'transparent' ? store.fillColor : '#fde047'
+                );
+              } else if (store.activeTool === 'underline') {
+                editor.addUnderline(
+                  store.currentPage,
+                  txt.x,
+                  txt.y + txt.height - 2,
+                  txt.width,
+                  store.strokeColor || '#f43f5e'
+                );
+              } else if (store.activeTool === 'strikethrough') {
+                editor.addStrikethrough(
+                  store.currentPage,
+                  txt.x,
+                  txt.y,
+                  txt.width,
+                  txt.height,
+                  store.strokeColor || '#f43f5e'
+                );
+              }
+            });
+          }
         } else {
           // If no text elements intersect (empty canvas, scanned document, or custom area)
           if (store.activeTool === 'highlight') {
@@ -929,8 +1088,14 @@ export default function EditorPage() {
         store.setSelectedElement(null);
         setShowSearch(false);
       }
-      if (e.key === 'Delete' && selectedElement) {
-        handleDeleteElement(selectedElement.id);
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedElement) {
+        const targetTag = (e.target as HTMLElement)?.tagName;
+        if (!['INPUT', 'TEXTAREA'].includes(targetTag)) {
+          e.preventDefault();
+          handleDeleteElement(selectedElement.id);
+          setSelectedElement(null);
+          store.setSelectedElement(null);
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -1730,22 +1895,81 @@ export default function EditorPage() {
                   }
 
                   if (ann.annotationType === 'underline' || ann.annotationType === 'strikethrough') {
+                    const isSelected = selectedElement?.id === ann.id;
+                    const lineThickness = Math.max(1, (ann.strokeWidth || 2) * scale);
+                    const hitHeight = Math.max(18, lineThickness + 14);
                     return (
                       <div
                         key={ann.id}
-                        className="absolute cursor-pointer"
+                        className={`absolute cursor-pointer select-none group flex items-center ${
+                          isSelected ? 'z-40' : 'z-15 hover:z-25'
+                        }`}
                         style={{
                           left: ann.x * scale,
-                          top: ann.y * scale,
-                          width: ann.width * scale,
-                          height: (ann.strokeWidth || 2) * scale,
-                          backgroundColor: ann.color,
+                          top: ann.y * scale - (hitHeight - lineThickness) / 2,
+                          width: Math.max(ann.width * scale, 16),
+                          height: hitHeight,
                         }}
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (store.activeTool === 'eraser') handleDeleteElement(ann.id);
+                          if (store.activeTool === 'eraser') {
+                            handleDeleteElement(ann.id);
+                          } else {
+                            setSelectedElement(ann);
+                            store.setSelectedElement(ann.id);
+                            store.setShowProperties(true);
+                          }
                         }}
-                      />
+                      >
+                        {/* The visible underline / strikethrough line */}
+                        <div
+                          className={`w-full transition-all ${
+                            isSelected
+                              ? 'ring-2 ring-blue-500 shadow-md ring-offset-1'
+                              : 'group-hover:opacity-90 group-hover:shadow-[0_0_8px_rgba(244,63,94,0.6)]'
+                          }`}
+                          style={{
+                            height: lineThickness,
+                            backgroundColor: ann.color || '#f43f5e',
+                            borderRadius: '1px',
+                          }}
+                        />
+
+                        {/* Floating Quick Action Badge when Selected */}
+                        {isSelected && (
+                          <div
+                            className="absolute -top-8 left-0 flex items-center gap-1.5 bg-surface-900 border border-primary-500/80 rounded-lg px-2 py-0.5 shadow-2xl text-[11px] text-white z-50 whitespace-nowrap pointer-events-auto"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <span className="font-semibold text-primary-300 capitalize text-[10px] tracking-wide">
+                              {ann.annotationType}
+                            </span>
+                            <div className="w-px h-3 bg-surface-700" />
+                            <input
+                              type="color"
+                              value={ann.color || '#f43f5e'}
+                              onChange={(e) => {
+                                const editor = getEditor();
+                                editor.updateElement(ann.id, { color: e.target.value } as any);
+                                refreshPageElements(store.currentPage);
+                              }}
+                              className="w-3.5 h-3.5 rounded cursor-pointer border-0 bg-transparent p-0"
+                              title="Change Color"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleDeleteElement(ann.id);
+                                setSelectedElement(null);
+                              }}
+                              className="p-1 text-red-400 hover:text-red-300 rounded hover:bg-surface-800 transition-colors"
+                              title="Remove Line (or press Delete)"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     );
                   }
 
@@ -1857,6 +2081,44 @@ export default function EditorPage() {
                             I
                           </button>
 
+                          {/* Underline Toggle */}
+                          <button
+                            type="button"
+                            onClick={() => handleToggleUnderline(txt)}
+                            className={`px-2 py-0.5 rounded-lg text-xs font-bold underline transition-colors ${
+                              txt.textDecoration === 'underline' || pageElements.some((a) => a.type === 'annotation' && (a as AnnotationElement).annotationType === 'underline' && Math.abs(a.x - txt.x) < 25 && Math.abs(a.y - (txt.y + txt.height - 2)) < 25)
+                                ? 'bg-primary-500 text-white'
+                                : 'hover:bg-surface-800 text-surface-300'
+                            }`}
+                            title="Toggle Underline (U) - Click again to remove anytime"
+                          >
+                            U
+                          </button>
+
+                          {/* Strikethrough Toggle */}
+                          <button
+                            type="button"
+                            onClick={() => handleToggleStrikethrough(txt)}
+                            className={`px-2 py-0.5 rounded-lg text-xs font-bold line-through transition-colors ${
+                              txt.textDecoration === 'line-through' || pageElements.some((a) => a.type === 'annotation' && (a as AnnotationElement).annotationType === 'strikethrough' && Math.abs(a.x - txt.x) < 25 && Math.abs(a.y - txt.y) < 25)
+                                ? 'bg-primary-500 text-white'
+                                : 'hover:bg-surface-800 text-surface-300'
+                            }`}
+                            title="Toggle Strikethrough (S) - Click again to remove anytime"
+                          >
+                            S
+                          </button>
+
+                          {/* Reset / Clear Formatting */}
+                          <button
+                            type="button"
+                            onClick={() => handleClearAllStyles(txt)}
+                            className="p-1 hover:text-amber-400 rounded text-surface-400 hover:bg-surface-800 transition-colors"
+                            title="Clear formatting & remove styles"
+                          >
+                            <RotateCcw className="w-3 h-3" />
+                          </button>
+
                           {/* Text Color Picker */}
                           <div className="flex items-center gap-1 pl-1 border-l border-surface-700">
                             <input
@@ -1939,6 +2201,7 @@ export default function EditorPage() {
                               fontFamily: effectiveFontFamily,
                               fontWeight: effectiveFontWeight,
                               fontStyle: effectiveFontStyle,
+                              textDecoration: txt.textDecoration || 'none',
                               color: effectiveColor,
                               lineHeight: 1.15,
                               minWidth: `${boxWidth}px`,
@@ -1977,6 +2240,7 @@ export default function EditorPage() {
                         color: txt.color || '#000000',
                         fontWeight: txt.fontWeight || 'normal',
                         fontStyle: (txt as any).fontStyle || 'normal',
+                        textDecoration: txt.textDecoration || 'none',
                         lineHeight: 1.15,
                         padding: 0,
                         margin: 0,
@@ -2021,8 +2285,6 @@ export default function EditorPage() {
 
             <div className="space-y-4">
               {/* Sticky Note Edit */}
-
-              {/* Sticky Note Edit */}
               {selectedElement.type === 'annotation' && (selectedElement as AnnotationElement).annotationType === 'sticky-note' && (
                 <div>
                   <label className="text-[11px] text-surface-400 block mb-1">Note Content</label>
@@ -2035,6 +2297,67 @@ export default function EditorPage() {
                     }}
                     className="input text-xs h-20 resize-none"
                   />
+                </div>
+              )}
+
+              {/* Underline / Strikethrough / Highlight Annotation Properties */}
+              {selectedElement.type === 'annotation' && ['underline', 'strikethrough', 'highlight'].includes((selectedElement as AnnotationElement).annotationType) && (
+                <div className="space-y-3 bg-surface-950/60 p-3 rounded-lg border border-surface-800">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-semibold text-primary-300 capitalize tracking-wide">
+                      {(selectedElement as AnnotationElement).annotationType} Style
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleDeleteElement(selectedElement.id);
+                        setSelectedElement(null);
+                      }}
+                      className="text-[10px] text-red-400 hover:text-red-300 flex items-center gap-1 hover:underline"
+                    >
+                      <Trash2 className="w-2.5 h-2.5" /> Remove
+                    </button>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] text-surface-400 block mb-1">Color</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={(selectedElement as AnnotationElement).color || '#f43f5e'}
+                        onChange={(e) => {
+                          const editor = getEditor();
+                          editor.updateElement(selectedElement.id, { color: e.target.value } as any);
+                          refreshPageElements(store.currentPage);
+                        }}
+                        className="w-6 h-6 rounded cursor-pointer border-0 bg-transparent p-0"
+                      />
+                      <span className="text-xs font-mono text-surface-300">
+                        {(selectedElement as AnnotationElement).color || '#f43f5e'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[10px] text-surface-400">Thickness</label>
+                      <span className="text-[10px] text-surface-300 font-mono">
+                        {(selectedElement as AnnotationElement).strokeWidth || 2}px
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="1"
+                      max="10"
+                      value={(selectedElement as AnnotationElement).strokeWidth || 2}
+                      onChange={(e) => {
+                        const editor = getEditor();
+                        editor.updateElement(selectedElement.id, { strokeWidth: Number(e.target.value) } as any);
+                        refreshPageElements(store.currentPage);
+                      }}
+                      className="w-full h-1 bg-surface-800 rounded-lg appearance-none cursor-pointer accent-primary-500"
+                    />
+                  </div>
                 </div>
               )}
 
