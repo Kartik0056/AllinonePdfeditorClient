@@ -111,6 +111,16 @@ export const authAPI = {
   login: (data: { email: string; password: string }) =>
     api.post('/auth/login', data),
   me: () => api.get('/auth/me'),
+  updateProfile: (data: {
+    name?: string;
+    avatar?: string;
+    phone?: string;
+    bio?: string;
+    company?: string;
+    paymentDetails?: any;
+  }) => api.put('/auth/profile', data),
+  changePassword: (data: { currentPassword: string; newPassword: string }) =>
+    api.put('/auth/password', data),
 };
 
 // ─── File API ────────────────────────────────────────────
