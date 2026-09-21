@@ -5,8 +5,10 @@
 import axios from 'axios';
 import { useAuthStore } from '../stores/authStore';
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? '' : 'https://allinonepdfeditorserver.onrender.com');
+
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: `${API_BASE_URL}/api`,
   timeout: 120000, // 2 minutes for large file operations
 });
 

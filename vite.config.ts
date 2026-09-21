@@ -15,12 +15,14 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:5000',
+        target: 'https://allinonepdfeditorserver.onrender.com',
         changeOrigin: true,
+        secure: true,
       },
       '/uploads': {
-        target: 'http://localhost:5000',
+        target: 'https://allinonepdfeditorserver.onrender.com',
         changeOrigin: true,
+        secure: true,
       },
     },
   },
