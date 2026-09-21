@@ -92,6 +92,16 @@ const filterPresets: { name: string; adjustments: Partial<ImageAdjustments>; bg:
   { name: 'Cool Nordic', adjustments: { brightness: 100, contrast: 105, hueRotate: 190, saturation: 90, temperature: -40 }, bg: 'from-blue-600 to-cyan-400' },
 ];
 
+function strokeToSvgPath(points: { x: number; y: number }[]) {
+  if (!points || points.length === 0) return '';
+  if (points.length === 1) return `M ${points[0].x} ${points[0].y} L ${points[0].x + 0.1} ${points[0].y + 0.1}`;
+  let path = `M ${points[0].x} ${points[0].y}`;
+  for (let i = 1; i < points.length; i++) {
+    path += ` L ${points[i].x} ${points[i].y}`;
+  }
+  return path;
+}
+
 export default function ImageEditorPage() {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imageSrc, setImageSrc] = useState<string | null>(null);
@@ -241,16 +251,77 @@ export default function ImageEditorPage() {
     }
   };
 
-  // Wheel to Zoom In / Out
-  const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    const delta = e.deltaY < 0 ? 12 : -12;
-    setZoom((z) => Math.max(20, Math.min(500, z + delta)));
+  // Drawing state
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [currentStroke, setCurrentStroke] = useState<{
+    points: { x: number; y: number }[];
+    color: string;
+    size: number;
+  } | null>(null);
+
+  const getImageCoords = (e: React.MouseEvent) => {
+    if (!imageContainerRef.current) return null;
+    const rect = imageContainerRef.current.getBoundingClientRect();
+    const scale = zoom / 100;
+    return {
+      x: (e.clientX - rect.left) / scale,
+      y: (e.clientY - rect.top) / scale,
+    };
   };
 
-  // Viewport Mouse Events for Panning when zoomed in
+  const handleDrawMouseDown = (e: React.MouseEvent) => {
+    if (activeTab !== 'draw') return;
+    e.stopPropagation();
+    const coords = getImageCoords(e);
+    if (!coords) return;
+    setIsDrawing(true);
+    setCurrentStroke({
+      points: [coords],
+      color: brushColor,
+      size: brushSize,
+    });
+  };
+
+  const handleDrawMouseMove = (e: React.MouseEvent) => {
+    if (activeTab !== 'draw' || !isDrawing || !currentStroke) return;
+    const coords = getImageCoords(e);
+    if (!coords) return;
+    setCurrentStroke((prev) =>
+      prev ? { ...prev, points: [...prev.points, coords] } : null
+    );
+  };
+
+  const handleDrawMouseUp = () => {
+    if (activeTab !== 'draw') return;
+    if (isDrawing && currentStroke && currentStroke.points.length > 0) {
+      setDrawingStrokes((prev) => [...prev, currentStroke]);
+    }
+    setIsDrawing(false);
+    setCurrentStroke(null);
+  };
+
+  // Wheel: Zoom ONLY on Ctrl+Wheel or Trackpad Pinch; Pan on standard 2-finger scroll
+  const handleWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    if (e.ctrlKey || e.metaKey) {
+      const delta = e.deltaY < 0 ? 12 : -12;
+      setZoom((z) => Math.max(20, Math.min(500, z + delta)));
+    } else {
+      setPan((p) => ({
+        x: p.x - e.deltaX,
+        y: p.y - e.deltaY,
+      }));
+    }
+  };
+
+  // Viewport Mouse Events for Panning (middle click or clicking empty stage)
   const handleViewportMouseDown = (e: React.MouseEvent) => {
-    if (e.button === 1 || e.target === e.currentTarget || (e.target as HTMLElement).tagName === 'DIV') {
+    if (activeTab === 'draw') {
+      handleDrawMouseDown(e);
+      return;
+    }
+    // Only pan if middle click OR clicking directly on the background container
+    if (e.button === 1 || e.target === e.currentTarget) {
       setIsPanning(true);
       panStartRef.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
     }
@@ -258,6 +329,10 @@ export default function ImageEditorPage() {
   };
 
   const handleViewportMouseMove = (e: React.MouseEvent) => {
+    if (activeTab === 'draw' && isDrawing) {
+      handleDrawMouseMove(e);
+      return;
+    }
     if (isPanning) {
       setPan({
         x: e.clientX - panStartRef.current.x,
@@ -267,6 +342,9 @@ export default function ImageEditorPage() {
   };
 
   const handleViewportMouseUp = () => {
+    if (activeTab === 'draw' && isDrawing) {
+      handleDrawMouseUp();
+    }
     setIsPanning(false);
   };
 
@@ -421,8 +499,20 @@ export default function ImageEditorPage() {
       ctx.scale(flipH ? -1 : 1, flipV ? -1 : 1);
       ctx.translate(-c.width / 2, -c.height / 2);
 
+      // Calculate dynamic tone curve adjustments
+      const curMaster = curves.master;
+      const curveContrast = Math.round(((curMaster.whites - curMaster.blacks) - 255) * 0.35);
+      const curveBrightness = Math.round((curMaster.midtones - 128) * 0.5);
+      const redShift = (curves.red.midtones - 128) * 0.2;
+      const blueShift = (curves.blue.midtones - 128) * 0.2;
+      const curveHue = Math.round(redShift - blueShift);
+
+      const totalBrightness = Math.max(0, adjustments.brightness + adjustments.exposure + curveBrightness);
+      const totalContrast = Math.max(0, adjustments.contrast + curveContrast);
+      const totalHue = adjustments.hueRotate + curveHue;
+
       // Apply CSS Filters directly to canvas drawing
-      ctx.filter = `brightness(${adjustments.brightness + adjustments.exposure}%) contrast(${adjustments.contrast}%) saturate(${adjustments.saturation + adjustments.vibrance}%) blur(${adjustments.blur}px) sepia(${adjustments.sepia}%) grayscale(${adjustments.grayscale}%) invert(${adjustments.invert}%) hue-rotate(${adjustments.hueRotate}deg)`;
+      ctx.filter = `brightness(${totalBrightness}%) contrast(${totalContrast}%) saturate(${adjustments.saturation + adjustments.vibrance}%) blur(${adjustments.blur}px) sepia(${adjustments.sepia}%) grayscale(${adjustments.grayscale}%) invert(${adjustments.invert}%) hue-rotate(${totalHue}deg)`;
       ctx.drawImage(img, 0, 0);
 
       // Vignette effect
@@ -439,15 +529,20 @@ export default function ImageEditorPage() {
 
       ctx.restore();
 
-      // Render Drawings
+      // Render Drawings with proper scaling to image dimensions
+      const displayW = imageContainerRef.current?.clientWidth || img.width;
+      const displayH = imageContainerRef.current?.clientHeight || img.height;
+      const scaleX = c.width / displayW;
+      const scaleY = c.height / displayH;
+
       ctx.save();
       drawingStrokes.forEach((stroke) => {
-        if (stroke.points.length < 2) return;
+        if (stroke.points.length === 0) return;
         ctx.beginPath();
-        ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
-        stroke.points.slice(1).forEach((p) => ctx.lineTo(p.x, p.y));
+        ctx.moveTo(stroke.points[0].x * scaleX, stroke.points[0].y * scaleY);
+        stroke.points.slice(1).forEach((p) => ctx.lineTo(p.x * scaleX, p.y * scaleY));
         ctx.strokeStyle = stroke.color;
-        ctx.lineWidth = stroke.size;
+        ctx.lineWidth = stroke.size * scaleX;
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
         ctx.stroke();
@@ -457,12 +552,12 @@ export default function ImageEditorPage() {
       // Render Text Layers
       textLayers.forEach((t) => {
         ctx.save();
-        ctx.font = `${t.fontWeight} ${t.fontSize}px ${t.fontFamily}`;
+        ctx.font = `${t.fontWeight} ${t.fontSize * scaleX}px ${t.fontFamily}`;
         ctx.textBaseline = 'top';
         ctx.fillStyle = t.color;
         ctx.shadowColor = 'rgba(0,0,0,0.6)';
         ctx.shadowBlur = 4;
-        ctx.fillText(t.text, t.x, t.y);
+        ctx.fillText(t.text, t.x * scaleX, t.y * scaleY);
         ctx.restore();
       });
 
@@ -488,8 +583,43 @@ export default function ImageEditorPage() {
     }));
   };
 
+  // Interactive Curve Dragging Handlers
+  const [draggingCurvePoint, setDraggingCurvePoint] = useState<keyof CurveChannelPoints | null>(null);
+  const curveSvgRef = useRef<SVGSVGElement>(null);
+
+  const handleCurvePointMouseDown = (e: React.MouseEvent, key: keyof CurveChannelPoints) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setDraggingCurvePoint(key);
+  };
+
+  const handleCurveSvgMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (!draggingCurvePoint || !curveSvgRef.current) return;
+    const rect = curveSvgRef.current.getBoundingClientRect();
+    const mouseY = e.clientY - rect.top;
+    const ratio = Math.max(0, Math.min(1, mouseY / rect.height));
+    const val = Math.round((1 - ratio) * 255);
+    updateCurvePoint(draggingCurvePoint, val);
+  };
+
+  const handleCurveSvgMouseUp = () => {
+    setDraggingCurvePoint(null);
+  };
+
+  // Dynamic Tone Curve effect for live preview
+  const curMaster = curves.master;
+  const curveContrast = Math.round(((curMaster.whites - curMaster.blacks) - 255) * 0.35);
+  const curveBrightness = Math.round((curMaster.midtones - 128) * 0.5);
+  const redShift = (curves.red.midtones - 128) * 0.2;
+  const blueShift = (curves.blue.midtones - 128) * 0.2;
+  const curveHue = Math.round(redShift - blueShift);
+
+  const totalBrightness = Math.max(0, adjustments.brightness + adjustments.exposure + curveBrightness);
+  const totalContrast = Math.max(0, adjustments.contrast + curveContrast);
+  const totalHue = adjustments.hueRotate + curveHue;
+
   return (
-    <div className="min-h-screen bg-surface-950 flex flex-col overflow-hidden select-none">
+    <div className="h-screen max-h-screen bg-surface-950 flex flex-col overflow-hidden select-none">
       <Navbar />
 
       {/* Editor Sub-Header Toolbar */}
@@ -642,20 +772,20 @@ export default function ImageEditorPage() {
           </div>
         </div>
       ) : (
-        <div className="flex flex-1 overflow-hidden relative">
+        <div className="flex flex-1 overflow-hidden relative min-h-0">
           {/* ─── 1. Center Stage / Canvas Viewport (LEFT & CENTER) ─── */}
           <div
-            className="flex-1 bg-surface-950 flex items-center justify-center overflow-hidden p-6 relative select-none"
+            className="flex-1 bg-surface-950 flex items-center justify-center overflow-hidden p-6 relative select-none h-full min-h-0"
             onWheel={handleWheel}
             onMouseDown={handleViewportMouseDown}
             onMouseMove={handleViewportMouseMove}
             onMouseUp={handleViewportMouseUp}
             onMouseLeave={handleViewportMouseUp}
-            style={{ cursor: isPanning ? 'grabbing' : zoom > 100 ? 'grab' : 'default' }}
+            style={{ cursor: activeTab === 'draw' ? 'crosshair' : isPanning ? 'grabbing' : zoom > 100 ? 'grab' : 'default' }}
           >
             {/* Quick Zoom Pill & Reset Overlay */}
             <div className="absolute bottom-4 left-4 z-20 bg-surface-900/90 backdrop-blur-md px-3 py-1.5 rounded-full border border-surface-800 text-[11px] text-surface-400 font-mono pointer-events-auto flex items-center gap-2.5 shadow-lg">
-              <span>🔍 Scroll wheel to Zoom In / Out</span>
+              <span>{activeTab === 'draw' ? '✏️ Draw Mode Active' : '🖱️ Pan: Drag • Zoom: Ctrl+Wheel'}</span>
               <span className="text-surface-600">•</span>
               <span className="text-white font-semibold">{zoom}%</span>
               {(zoom !== 100 || pan.x !== 0 || pan.y !== 0) && (
@@ -690,14 +820,49 @@ export default function ImageEditorPage() {
               <img
                 src={isComparing && originalSrc ? originalSrc : imageSrc}
                 alt="Workspace"
-                className="max-h-[82vh] max-w-[calc(100vw-460px)] object-contain block pointer-events-none"
+                className="max-h-[82vh] max-w-[calc(100vw-460px)] object-contain block pointer-events-none select-none"
                 style={{
                   filter: isComparing
                     ? 'none'
-                    : `brightness(${adjustments.brightness + adjustments.exposure}%) contrast(${adjustments.contrast}%) saturate(${adjustments.saturation + adjustments.vibrance}%) blur(${adjustments.blur}px) sepia(${adjustments.sepia}%) grayscale(${adjustments.grayscale}%) invert(${adjustments.invert}%) hue-rotate(${adjustments.hueRotate}deg)`,
+                    : `brightness(${totalBrightness}%) contrast(${totalContrast}%) saturate(${adjustments.saturation + adjustments.vibrance}%) blur(${adjustments.blur}px) sepia(${adjustments.sepia}%) grayscale(${adjustments.grayscale}%) invert(${adjustments.invert}%) hue-rotate(${totalHue}deg)`,
                   transform: `rotate(${rotation}deg) scaleX(${flipH ? -1 : 1}) scaleY(${flipV ? -1 : 1})`,
                 }}
               />
+
+              {/* Freehand Brush Drawing SVG Layer */}
+              <svg
+                className="absolute inset-0 w-full h-full"
+                style={{
+                  pointerEvents: activeTab === 'draw' ? 'auto' : 'none',
+                  cursor: activeTab === 'draw' ? 'crosshair' : 'default',
+                  zIndex: 25,
+                }}
+                onMouseDown={handleDrawMouseDown}
+                onMouseMove={handleDrawMouseMove}
+                onMouseUp={handleDrawMouseUp}
+              >
+                {drawingStrokes.map((stroke, idx) => (
+                  <path
+                    key={idx}
+                    d={strokeToSvgPath(stroke.points)}
+                    fill="none"
+                    stroke={stroke.color}
+                    strokeWidth={stroke.size}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                ))}
+                {currentStroke && (
+                  <path
+                    d={strokeToSvgPath(currentStroke.points)}
+                    fill="none"
+                    stroke={currentStroke.color}
+                    strokeWidth={currentStroke.size}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                )}
+              </svg>
 
               {/* Real-time Vignette Overlay */}
               {!isComparing && adjustments.vignette > 0 && (
@@ -784,8 +949,8 @@ export default function ImageEditorPage() {
             </div>
           </div>
 
-          {/* ─── 2. Tool Options Sub-Panel (RIGHT SIDE) ─── */}
-          <div className="w-80 bg-surface-900/95 border-l border-surface-800/80 p-4 overflow-y-auto shrink-0 flex flex-col z-10">
+          {/* ─── 2. Tool Options Sub-Panel (RIGHT SIDE - Independently Scrollable) ─── */}
+          <div className="w-80 md:w-88 bg-surface-900/98 border-l border-surface-800 p-4 overflow-y-auto shrink-0 flex flex-col z-10 h-full min-h-0">
             <h3 className="text-xs font-bold text-white uppercase tracking-wider mb-4 pb-2 border-b border-surface-800 flex items-center justify-between">
               <span>
                 {activeTab === 'adjust' && 'Light & Color Grading'}
@@ -922,10 +1087,17 @@ export default function ImageEditorPage() {
                   ))}
                 </div>
 
-                {/* Interactive Curve SVG Graph */}
-                <div className="relative w-full aspect-square bg-surface-950 rounded-xl border border-surface-700 p-3 shadow-inner">
+                {/* Interactive Curve SVG Graph with Dragging */}
+                <div className="relative w-full aspect-square bg-surface-950 rounded-xl border border-surface-700 p-3 shadow-inner select-none">
                   {/* Grid Lines */}
-                  <svg className="w-full h-full" viewBox="0 0 256 256">
+                  <svg
+                    ref={curveSvgRef}
+                    className="w-full h-full cursor-crosshair select-none"
+                    viewBox="0 0 256 256"
+                    onMouseMove={handleCurveSvgMouseMove}
+                    onMouseUp={handleCurveSvgMouseUp}
+                    onMouseLeave={handleCurveSvgMouseUp}
+                  >
                     <line x1="64" y1="0" x2="64" y2="256" stroke="#27272a" strokeWidth="1" strokeDasharray="3 3" />
                     <line x1="128" y1="0" x2="128" y2="256" stroke="#3f3f46" strokeWidth="1" />
                     <line x1="192" y1="0" x2="192" y2="256" stroke="#27272a" strokeWidth="1" strokeDasharray="3 3" />
@@ -943,9 +1115,9 @@ export default function ImageEditorPage() {
                       stroke={
                         activeCurveChannel === 'red' ? '#ef4444' :
                         activeCurveChannel === 'green' ? '#22c55e' :
-                        activeCurveChannel === 'blue' ? '#3b82f6' : '#ffffff'
+                        activeCurveChannel === 'blue' ? '#3b82f6' : '#38bdf8'
                       }
-                      strokeWidth="2.5"
+                      strokeWidth="3"
                     />
 
                     {/* Interactive Points */}
@@ -960,11 +1132,12 @@ export default function ImageEditorPage() {
                         key={pt.key}
                         cx={pt.x}
                         cy={256 - pt.y}
-                        r="5"
-                        fill="#38bdf8"
+                        r="7"
+                        fill={draggingCurvePoint === pt.key ? '#f59e0b' : '#38bdf8'}
                         stroke="#ffffff"
-                        strokeWidth="1.5"
+                        strokeWidth="2"
                         className="cursor-ns-resize hover:scale-125 transition-transform"
+                        onMouseDown={(e) => handleCurvePointMouseDown(e, pt.key as keyof CurveChannelPoints)}
                       />
                     ))}
                   </svg>
@@ -1279,35 +1452,103 @@ export default function ImageEditorPage() {
             {/* 6. Draw / Brush */}
             {activeTab === 'draw' && (
               <div className="space-y-4">
-                <div>
-                  <label className="text-xs text-surface-400 block mb-1">Brush Color</label>
-                  <input
-                    type="color"
-                    value={brushColor}
-                    onChange={(e) => setBrushColor(e.target.value)}
-                    className="w-full h-8 rounded cursor-pointer bg-transparent border border-surface-700"
-                  />
+                <div className="p-3 bg-rose-500/10 border border-rose-500/25 rounded-xl">
+                  <div className="flex items-center gap-2 text-rose-400 font-bold text-xs mb-1">
+                    <PenTool className="w-3.5 h-3.5" />
+                    <span>Freehand Brush Active</span>
+                  </div>
+                  <p className="text-[11px] text-surface-400">
+                    Click and drag directly on the image to paint. Panning is locked while drawing.
+                  </p>
                 </div>
+
+                {/* Brush Color & Swatches */}
                 <div>
-                  <div className="flex justify-between text-xs text-surface-400 mb-1">
-                    <span>Brush Size</span>
-                    <span>{brushSize}px</span>
+                  <label className="text-xs font-semibold text-surface-300 block mb-1.5">Brush Color</label>
+                  <div className="flex items-center gap-2 mb-2">
+                    <input
+                      type="color"
+                      value={brushColor}
+                      onChange={(e) => setBrushColor(e.target.value)}
+                      className="w-10 h-8 rounded-lg cursor-pointer bg-transparent border border-surface-700 p-0.5"
+                    />
+                    <span className="font-mono text-xs text-white bg-surface-950 px-2 py-1 rounded border border-surface-800">
+                      {brushColor}
+                    </span>
+                  </div>
+                  {/* Preset Swatches */}
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      '#ef4444', '#f59e0b', '#10b981', '#06b6d4',
+                      '#3b82f6', '#8b5cf6', '#ec4899', '#ffffff', '#000000'
+                    ].map((col) => (
+                      <button
+                        key={col}
+                        type="button"
+                        onClick={() => setBrushColor(col)}
+                        className={`w-6 h-6 rounded-full border transition-transform ${
+                          brushColor.toLowerCase() === col.toLowerCase()
+                            ? 'scale-110 ring-2 ring-white shadow-md'
+                            : 'hover:scale-105 border-surface-700'
+                        }`}
+                        style={{ backgroundColor: col }}
+                        title={col}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                {/* Brush Size Slider */}
+                <div>
+                  <div className="flex justify-between text-xs text-surface-300 mb-1">
+                    <span>Brush Thickness</span>
+                    <span className="font-mono text-rose-400">{brushSize}px</span>
                   </div>
                   <input
                     type="range"
                     min="1"
-                    max="40"
+                    max="60"
                     value={brushSize}
                     onChange={(e) => setBrushSize(Number(e.target.value))}
-                    className="w-full accent-primary-500"
+                    className="w-full accent-rose-500"
                   />
+                  {/* Visual preview of brush thickness */}
+                  <div className="h-8 bg-surface-950 rounded-lg flex items-center justify-center mt-2 border border-surface-800 overflow-hidden">
+                    <div
+                      className="rounded-full"
+                      style={{
+                        width: `${Math.min(28, brushSize)}px`,
+                        height: `${Math.min(28, brushSize)}px`,
+                        backgroundColor: brushColor,
+                      }}
+                    />
+                  </div>
                 </div>
-                <button
-                  onClick={() => setDrawingStrokes([])}
-                  className="btn-secondary w-full text-xs py-2 text-red-400"
-                >
-                  Clear All Drawings
-                </button>
+
+                {/* Actions: Undo last stroke & Clear All */}
+                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-surface-800">
+                  <button
+                    onClick={() => setDrawingStrokes((prev) => prev.slice(0, -1))}
+                    disabled={drawingStrokes.length === 0}
+                    className="btn-secondary text-xs py-2 disabled:opacity-30 flex items-center justify-center gap-1"
+                  >
+                    <Undo2 className="w-3 h-3" />
+                    <span>Undo Stroke</span>
+                  </button>
+                  <button
+                    onClick={() => setDrawingStrokes([])}
+                    disabled={drawingStrokes.length === 0}
+                    className="btn-secondary text-xs py-2 text-red-400 hover:text-red-300 disabled:opacity-30 flex items-center justify-center gap-1"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    <span>Clear All</span>
+                  </button>
+                </div>
+                {drawingStrokes.length > 0 && (
+                  <span className="text-[10px] text-surface-500 block text-center">
+                    {drawingStrokes.length} active brush {drawingStrokes.length === 1 ? 'stroke' : 'strokes'} on image
+                  </span>
+                )}
               </div>
             )}
 
@@ -1333,15 +1574,15 @@ export default function ImageEditorPage() {
           </div>
 
           {/* ─── 3. Rightmost Studio Sidebar Navigation (RIGHT SIDE) ─── */}
-          <div className="w-16 bg-surface-900 border-l border-surface-800/80 flex flex-col items-center py-3 gap-2 shrink-0 z-10">
+          <div className="w-16 bg-surface-950 border-l border-surface-800/80 flex flex-col items-center py-3 gap-2 shrink-0 z-10 h-full min-h-0">
             {[
-              { id: 'adjust', icon: Sliders, label: 'Adjust' },
-              { id: 'curves', icon: TrendingUp, label: 'Curves' },
-              { id: 'filters', icon: Palette, label: 'Presets' },
-              { id: 'crop', icon: Crop, label: 'Crop' },
-              { id: 'text', icon: Type, label: 'Text' },
-              { id: 'draw', icon: PenTool, label: 'Draw' },
-              { id: 'magic', icon: Sparkles, label: 'Magic' },
+              { id: 'adjust', icon: Sliders, label: 'Adjust', grad: 'from-amber-500 to-yellow-600', ring: 'ring-amber-500/40 text-black font-bold' },
+              { id: 'curves', icon: TrendingUp, label: 'Curves', grad: 'from-indigo-500 to-blue-600', ring: 'ring-indigo-500/40 text-white font-bold' },
+              { id: 'filters', icon: Palette, label: 'Presets', grad: 'from-cyan-500 to-teal-600', ring: 'ring-cyan-500/40 text-black font-bold' },
+              { id: 'crop', icon: Crop, label: 'Crop', grad: 'from-emerald-500 to-teal-600', ring: 'ring-emerald-500/40 text-black font-bold' },
+              { id: 'text', icon: Type, label: 'Text', grad: 'from-pink-500 to-rose-600', ring: 'ring-pink-500/40 text-white font-bold' },
+              { id: 'draw', icon: PenTool, label: 'Draw', grad: 'from-rose-500 to-red-600', ring: 'ring-rose-500/40 text-white font-bold' },
+              { id: 'magic', icon: Sparkles, label: 'Magic', grad: 'from-purple-500 to-indigo-600', ring: 'ring-purple-500/40 text-white font-bold' },
             ].map((tab) => {
               const Icon = tab.icon;
               const isSelected = activeTab === tab.id;
@@ -1354,12 +1595,13 @@ export default function ImageEditorPage() {
                   }}
                   className={`w-12 h-12 rounded-xl flex flex-col items-center justify-center gap-1 transition-all ${
                     isSelected
-                      ? 'bg-primary-500 text-white shadow-lg shadow-primary-500/30'
-                      : 'text-surface-400 hover:text-white hover:bg-surface-800/60'
+                      ? `bg-gradient-to-br ${tab.grad} ${tab.ring} shadow-lg scale-105`
+                      : 'text-surface-400 hover:text-white hover:bg-surface-900/90'
                   }`}
+                  title={tab.label}
                 >
                   <Icon className="w-4 h-4" />
-                  <span className="text-[9px] font-medium">{tab.label}</span>
+                  <span className="text-[9px]">{tab.label}</span>
                 </button>
               );
             })}

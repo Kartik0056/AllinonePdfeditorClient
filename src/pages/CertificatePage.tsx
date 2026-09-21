@@ -25,12 +25,16 @@ import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 export type CertificateCategory = 'all' | 'academic' | 'corporate' | 'course' | 'appreciation' | 'sports' | 'luxury';
 
 export type BorderStyle =
+  | 'executive-double'
+  | 'institutional-triple'
+  | 'modern-minimalist'
+  | 'luxury-gold'
+  | 'greek-meander'
+  | 'art-deco'
+  | 'celtic-knot'
   | 'royal-guilloche'
   | 'victorian-filigree'
-  | 'greek-meander'
   | 'diploma-triple'
-  | 'celtic-knot'
-  | 'art-deco'
   | 'modern-geometric'
   | 'custom-upload'
   | 'custom-builder'
@@ -64,6 +68,10 @@ export interface CertificateTemplate {
     cornerOrnaments: boolean;
     customBorderUrl?: string;
     customBorderWidth?: number;
+    customInnerBorderWidth?: number;
+    customBorderInset?: number;
+    customBorderScale?: number;
+    customBorderFit?: 'fill' | 'contain' | 'cover';
     customCornerStyle?: 'rosette' | 'filigree' | 'fleur-de-lis' | 'star' | 'none';
     watermarkType: 'guilloche' | 'parchment' | 'linen' | 'none';
     badgeType: BadgeType;
@@ -441,12 +449,23 @@ export function CertificateBorderRenderer({
   if (style === 'none') return null;
 
   if (style === 'custom-upload' && theme.customBorderUrl) {
+    const inset = theme.customBorderInset || 0;
+    const scale = (theme.customBorderScale || 100) / 100;
+    const fit = theme.customBorderFit || 'fill';
+
     return (
-      <div className="absolute inset-0 pointer-events-none z-10">
+      <div
+        className="absolute inset-0 pointer-events-none z-10 flex items-center justify-center overflow-hidden"
+        style={{ padding: `${inset}px` }}
+      >
         <img
           src={theme.customBorderUrl}
           alt="Custom Border"
-          className="w-full h-full object-fill pointer-events-none select-none"
+          style={{
+            transform: `scale(${scale})`,
+            objectFit: fit,
+          }}
+          className="w-full h-full pointer-events-none select-none"
         />
       </div>
     );
@@ -459,160 +478,136 @@ export function CertificateBorderRenderer({
       preserveAspectRatio="none"
       viewBox="0 0 1000 700"
     >
-      <defs>
-        {/* Greek Meander Pattern */}
-        <pattern id="greek-fret" width="40" height="20" patternUnits="userSpaceOnUse">
-          <path
-            d="M 0,10 H 30 V 20 H 10 V 0 H 40 V 10"
-            fill="none"
-            stroke={primary}
-            strokeWidth="1.5"
-          />
-        </pattern>
-
-        {/* Guilloche Lace Pattern */}
-        <pattern id="guilloche-lace" width="30" height="30" patternUnits="userSpaceOnUse">
-          <circle cx="15" cy="15" r="14" fill="none" stroke={primary} strokeWidth="0.8" opacity="0.8" />
-          <circle cx="15" cy="15" r="10" fill="none" stroke={primary} strokeWidth="0.8" strokeDasharray="2 2" opacity="0.6" />
-        </pattern>
-      </defs>
-
-      {/* ─── 1. Royal Guilloche Border ──────────────────────────────── */}
-      {style === 'royal-guilloche' && (
+      {/* ─── 1. Executive Double Pinstripe (Sharp & Professional) ───────── */}
+      {(style === 'executive-double' || style === 'royal-guilloche') && (
         <g>
           {/* Outer Heavy Rule */}
-          <rect x="18" y="18" width="964" height="664" fill="none" stroke={primary} strokeWidth="4" />
-          {/* Middle Hairline with spacing */}
-          <rect x="26" y="26" width="948" height="648" fill="none" stroke={primary} strokeWidth="1" opacity="0.6" />
-          {/* Wavy Guilloche Band */}
-          <rect x="32" y="32" width="936" height="636" fill="none" stroke={primary} strokeWidth="2" strokeDasharray="6 3" />
-          <rect x="40" y="40" width="920" height="620" fill="none" stroke={primary} strokeWidth="1" />
-
-          {/* 4 Corner Baroque Filigree Scrolls */}
+          <rect x="22" y="22" width="956" height="656" fill="none" stroke={primary} strokeWidth="4" />
+          {/* Inner Pinstripe */}
+          <rect x="32" y="32" width="936" height="636" fill="none" stroke={primary} strokeWidth="1.5" opacity="0.8" />
+          {/* Precision Corner Crosses & Squares (Clean & Modern) */}
           {theme.cornerOrnaments && (
             <>
-              {/* Top Left */}
-              <g transform="translate(18, 18)">
-                <path d="M 0,0 L 55,0 C 35,10 25,25 20,55 L 0,0 Z" fill={primary} opacity="0.8" />
-                <path d="M 5,5 Q 35,5 45,35 Q 25,25 5,5" fill="none" stroke={primary} strokeWidth="2" />
-                <circle cx="28" cy="28" r="4" fill={primary} />
+              {/* Top Left Corner */}
+              <g transform="translate(22, 22)">
+                <rect x="-6" y="-6" width="12" height="12" fill={primary} />
+                <rect x="-2" y="-2" width="4" height="4" fill="#FFFFFF" />
+                <line x1="-12" y1="0" x2="12" y2="0" stroke={primary} strokeWidth="1.5" />
+                <line x1="0" y1="-12" x2="0" y2="12" stroke={primary} strokeWidth="1.5" />
               </g>
-              {/* Top Right */}
-              <g transform="translate(982, 18) scale(-1, 1)">
-                <path d="M 0,0 L 55,0 C 35,10 25,25 20,55 L 0,0 Z" fill={primary} opacity="0.8" />
-                <path d="M 5,5 Q 35,5 45,35 Q 25,25 5,5" fill="none" stroke={primary} strokeWidth="2" />
-                <circle cx="28" cy="28" r="4" fill={primary} />
+              {/* Top Right Corner */}
+              <g transform="translate(978, 22)">
+                <rect x="-6" y="-6" width="12" height="12" fill={primary} />
+                <rect x="-2" y="-2" width="4" height="4" fill="#FFFFFF" />
+                <line x1="-12" y1="0" x2="12" y2="0" stroke={primary} strokeWidth="1.5" />
+                <line x1="0" y1="-12" x2="0" y2="12" stroke={primary} strokeWidth="1.5" />
               </g>
-              {/* Bottom Left */}
-              <g transform="translate(18, 682) scale(1, -1)">
-                <path d="M 0,0 L 55,0 C 35,10 25,25 20,55 L 0,0 Z" fill={primary} opacity="0.8" />
-                <path d="M 5,5 Q 35,5 45,35 Q 25,25 5,5" fill="none" stroke={primary} strokeWidth="2" />
-                <circle cx="28" cy="28" r="4" fill={primary} />
+              {/* Bottom Left Corner */}
+              <g transform="translate(22, 678)">
+                <rect x="-6" y="-6" width="12" height="12" fill={primary} />
+                <rect x="-2" y="-2" width="4" height="4" fill="#FFFFFF" />
+                <line x1="-12" y1="0" x2="12" y2="0" stroke={primary} strokeWidth="1.5" />
+                <line x1="0" y1="-12" x2="0" y2="12" stroke={primary} strokeWidth="1.5" />
               </g>
-              {/* Bottom Right */}
-              <g transform="translate(982, 682) scale(-1, -1)">
-                <path d="M 0,0 L 55,0 C 35,10 25,25 20,55 L 0,0 Z" fill={primary} opacity="0.8" />
-                <path d="M 5,5 Q 35,5 45,35 Q 25,25 5,5" fill="none" stroke={primary} strokeWidth="2" />
-                <circle cx="28" cy="28" r="4" fill={primary} />
+              {/* Bottom Right Corner */}
+              <g transform="translate(978, 678)">
+                <rect x="-6" y="-6" width="12" height="12" fill={primary} />
+                <rect x="-2" y="-2" width="4" height="4" fill="#FFFFFF" />
+                <line x1="-12" y1="0" x2="12" y2="0" stroke={primary} strokeWidth="1.5" />
+                <line x1="0" y1="-12" x2="0" y2="12" stroke={primary} strokeWidth="1.5" />
               </g>
             </>
           )}
         </g>
       )}
 
-      {/* ─── 2. Victorian Filigree & Floral Corners ───────────────────── */}
-      {style === 'victorian-filigree' && (
+      {/* ─── 2. Institutional Classic Triple Rule (Diploma/University) ──── */}
+      {(style === 'institutional-triple' || style === 'diploma-triple') && (
         <g>
-          <rect x="20" y="20" width="960" height="660" fill="none" stroke={primary} strokeWidth="3" />
-          <rect x="28" y="28" width="944" height="644" fill="none" stroke={secondary} strokeWidth="1.5" />
-          <rect x="36" y="36" width="928" height="628" fill="none" stroke={primary} strokeWidth="0.75" strokeDasharray="3 3" />
+          {/* Outer Heavy Rule */}
+          <rect x="18" y="18" width="964" height="664" fill="none" stroke={primary} strokeWidth="5" />
+          {/* Middle Hairline */}
+          <rect x="28" y="28" width="944" height="644" fill="none" stroke={primary} strokeWidth="1" opacity="0.6" />
+          {/* Inner Accent Rule */}
+          <rect x="34" y="34" width="932" height="632" fill="none" stroke={secondary} strokeWidth="2" />
 
-          {/* Ornate Victorian Floral Corner Brackets */}
-          <g transform="translate(20, 20)">
-            <path d="M 0,70 C 10,40 30,20 60,10 C 40,30 20,50 0,70" fill={primary} opacity="0.7" />
-            <circle cx="35" cy="35" r="5" fill={primary} />
+          {/* Corner Rosette Medallions */}
+          <g transform="translate(26, 26)">
+            <circle cx="0" cy="0" r="10" fill={primary} />
+            <circle cx="0" cy="0" r="5" fill="#FFFFFF" />
           </g>
-          <g transform="translate(980, 20) scale(-1, 1)">
-            <path d="M 0,70 C 10,40 30,20 60,10 C 40,30 20,50 0,70" fill={primary} opacity="0.7" />
-            <circle cx="35" cy="35" r="5" fill={primary} />
+          <g transform="translate(974, 26)">
+            <circle cx="0" cy="0" r="10" fill={primary} />
+            <circle cx="0" cy="0" r="5" fill="#FFFFFF" />
           </g>
-          <g transform="translate(20, 680) scale(1, -1)">
-            <path d="M 0,70 C 10,40 30,20 60,10 C 40,30 20,50 0,70" fill={primary} opacity="0.7" />
-            <circle cx="35" cy="35" r="5" fill={primary} />
+          <g transform="translate(26, 674)">
+            <circle cx="0" cy="0" r="10" fill={primary} />
+            <circle cx="0" cy="0" r="5" fill="#FFFFFF" />
           </g>
-          <g transform="translate(980, 680) scale(-1, -1)">
-            <path d="M 0,70 C 10,40 30,20 60,10 C 40,30 20,50 0,70" fill={primary} opacity="0.7" />
-            <circle cx="35" cy="35" r="5" fill={primary} />
+          <g transform="translate(974, 674)">
+            <circle cx="0" cy="0" r="10" fill={primary} />
+            <circle cx="0" cy="0" r="5" fill="#FFFFFF" />
           </g>
         </g>
       )}
 
-      {/* ─── 3. Greek Meander Fretwork ───────────────────────────────── */}
+      {/* ─── 3. Luxury Gold Inset (Prestigious & Corporate) ─────────────── */}
+      {(style === 'luxury-gold' || style === 'victorian-filigree') && (
+        <g>
+          {/* Outer Gold Band */}
+          <rect x="20" y="20" width="960" height="660" fill="none" stroke={primary} strokeWidth="3" />
+          {/* Keyline Rule */}
+          <rect x="30" y="30" width="940" height="640" fill="none" stroke={primary} strokeWidth="1" opacity="0.7" />
+          <rect x="38" y="38" width="924" height="624" fill="none" stroke={primary} strokeWidth="0.5" strokeDasharray="4 2" />
+
+          {/* Precision Diamond Corner Accents */}
+          <polygon points="30,20 40,30 30,40 20,30" fill={primary} />
+          <polygon points="970,20 980,30 970,40 960,30" fill={primary} />
+          <polygon points="30,660 40,670 30,680 20,670" fill={primary} />
+          <polygon points="970,660 980,670 970,680 960,670" fill={primary} />
+        </g>
+      )}
+
+      {/* ─── 4. Modern Minimalist Frame (Swiss Precision) ───────────────── */}
+      {(style === 'modern-minimalist' || style === 'modern-geometric') && (
+        <g>
+          {/* Outer Perimeter */}
+          <rect x="24" y="24" width="952" height="652" fill="none" stroke={primary} strokeWidth="1.5" />
+          {/* Corner L-Brackets */}
+          <polyline points="16,48 16,16 48,16" fill="none" stroke={secondary} strokeWidth="3" />
+          <polyline points="984,48 984,16 952,16" fill="none" stroke={secondary} strokeWidth="3" />
+          <polyline points="16,652 16,684 48,684" fill="none" stroke={secondary} strokeWidth="3" />
+          <polyline points="984,652 984,684 952,684" fill="none" stroke={secondary} strokeWidth="3" />
+          {/* Center Tick Indicators */}
+          <line x1="500" y1="12" x2="500" y2="28" stroke={primary} strokeWidth="2" />
+          <line x1="500" y1="672" x2="500" y2="688" stroke={primary} strokeWidth="2" />
+        </g>
+      )}
+
+      {/* ─── 5. Greek Key Fretwork (Pure Geometric Fret) ────────────────── */}
       {style === 'greek-meander' && (
         <g>
           <rect x="18" y="18" width="964" height="664" fill="none" stroke={primary} strokeWidth="3" />
           <rect x="32" y="32" width="936" height="636" fill="none" stroke={primary} strokeWidth="1.5" />
-          {/* Corner Rosette Medallions */}
-          <circle cx="45" cy="45" r="16" fill="none" stroke={primary} strokeWidth="2" />
-          <circle cx="45" cy="45" r="8" fill={primary} />
-          <circle cx="955" cy="45" r="16" fill="none" stroke={primary} strokeWidth="2" />
-          <circle cx="955" cy="45" r="8" fill={primary} />
-          <circle cx="45" cy="655" r="16" fill="none" stroke={primary} strokeWidth="2" />
-          <circle cx="45" cy="655" r="8" fill={primary} />
-          <circle cx="955" cy="655" r="16" fill="none" stroke={primary} strokeWidth="2" />
-          <circle cx="955" cy="655" r="8" fill={primary} />
+          {/* Clean Concentric Rosettes */}
+          <circle cx="45" cy="45" r="14" fill="none" stroke={primary} strokeWidth="2" />
+          <circle cx="45" cy="45" r="6" fill={primary} />
+          <circle cx="955" cy="45" r="14" fill="none" stroke={primary} strokeWidth="2" />
+          <circle cx="955" cy="45" r="6" fill={primary} />
+          <circle cx="45" cy="655" r="14" fill="none" stroke={primary} strokeWidth="2" />
+          <circle cx="45" cy="655" r="6" fill={primary} />
+          <circle cx="955" cy="655" r="14" fill="none" stroke={primary} strokeWidth="2" />
+          <circle cx="955" cy="655" r="6" fill={primary} />
         </g>
       )}
 
-      {/* ─── 4. Diploma Triple Gold ─────────────────────────────────── */}
-      {style === 'diploma-triple' && (
-        <g>
-          <rect x="16" y="16" width="968" height="668" fill="none" stroke={primary} strokeWidth="5" />
-          <rect x="25" y="25" width="950" height="650" fill="none" stroke={primary} strokeWidth="1" />
-          <rect x="30" y="30" width="940" height="640" fill="none" stroke={secondary} strokeWidth="2" />
-
-          {/* Fleur-de-lis Corner Accents */}
-          <g transform="translate(30, 30)">
-            <path d="M 0,0 L 25,0 L 0,25 Z" fill={primary} />
-            <polygon points="12,4 16,16 4,12" fill="#FFFFFF" />
-          </g>
-          <g transform="translate(970, 30) scale(-1, 1)">
-            <path d="M 0,0 L 25,0 L 0,25 Z" fill={primary} />
-            <polygon points="12,4 16,16 4,12" fill="#FFFFFF" />
-          </g>
-          <g transform="translate(30, 670) scale(1, -1)">
-            <path d="M 0,0 L 25,0 L 0,25 Z" fill={primary} />
-            <polygon points="12,4 16,16 4,12" fill="#FFFFFF" />
-          </g>
-          <g transform="translate(970, 670) scale(-1, -1)">
-            <path d="M 0,0 L 25,0 L 0,25 Z" fill={primary} />
-            <polygon points="12,4 16,16 4,12" fill="#FFFFFF" />
-          </g>
-        </g>
-      )}
-
-      {/* ─── 5. Celtic Knotwork Heritage ────────────────────────────── */}
-      {style === 'celtic-knot' && (
-        <g>
-          <rect x="22" y="22" width="956" height="656" fill="none" stroke={primary} strokeWidth="3" />
-          <rect x="32" y="32" width="936" height="636" fill="none" stroke={primary} strokeWidth="1.5" strokeDasharray="8 4" />
-          {/* Celtic Triquetra Corners */}
-          <circle cx="48" cy="48" r="14" fill="none" stroke={primary} strokeWidth="2" />
-          <path d="M 38,48 A 10,10 0 0,1 58,48 A 10,10 0 0,1 48,38 Z" fill={primary} opacity="0.6" />
-          <circle cx="952" cy="48" r="14" fill="none" stroke={primary} strokeWidth="2" />
-          <circle cx="48" cy="652" r="14" fill="none" stroke={primary} strokeWidth="2" />
-          <circle cx="952" cy="652" r="14" fill="none" stroke={primary} strokeWidth="2" />
-        </g>
-      )}
-
-      {/* ─── 6. Art Deco Stepped Chevrons ────────────────────────────── */}
+      {/* ─── 6. Art Deco Stepped Chevron (Architectural) ────────────────── */}
       {style === 'art-deco' && (
         <g>
           <rect x="20" y="20" width="960" height="660" fill="none" stroke={primary} strokeWidth="2" />
-          <rect x="30" y="30" width="940" height="640" fill="none" stroke={primary} strokeWidth="4" />
+          <rect x="30" y="30" width="940" height="640" fill="none" stroke={primary} strokeWidth="3.5" />
           <rect x="42" y="42" width="916" height="616" fill="none" stroke={primary} strokeWidth="1" />
-
-          {/* Stepped 45-degree Tiered Corners */}
+          {/* Stepped Angular 45-degree Bevels */}
           <polygon points="20,20 60,20 20,60" fill={primary} />
           <polygon points="980,20 940,20 980,60" fill={primary} />
           <polygon points="20,680 60,680 20,640" fill={primary} />
@@ -620,46 +615,41 @@ export function CertificateBorderRenderer({
         </g>
       )}
 
-      {/* ─── 7. Modern Geometric Edge ────────────────────────────────── */}
-      {style === 'modern-geometric' && (
+      {/* ─── 7. Celtic Geometric Braid (Clean Interlock) ────────────────── */}
+      {style === 'celtic-knot' && (
         <g>
-          <rect x="24" y="24" width="952" height="652" fill="none" stroke={primary} strokeWidth="2" />
-          <polyline points="16,60 16,16 60,16" fill="none" stroke={secondary} strokeWidth="4" />
-          <polyline points="984,60 984,16 940,16" fill="none" stroke={secondary} strokeWidth="4" />
-          <polyline points="16,640 16,684 60,684" fill="none" stroke={secondary} strokeWidth="4" />
-          <polyline points="984,640 984,684 940,684" fill="none" stroke={secondary} strokeWidth="4" />
+          <rect x="22" y="22" width="956" height="656" fill="none" stroke={primary} strokeWidth="3" />
+          <rect x="34" y="34" width="932" height="632" fill="none" stroke={primary} strokeWidth="1.5" strokeDasharray="8 4" />
+          {/* Clean Quad Rosette Circles */}
+          <circle cx="48" cy="48" r="12" fill="none" stroke={primary} strokeWidth="2" />
+          <circle cx="952" cy="48" r="12" fill="none" stroke={primary} strokeWidth="2" />
+          <circle cx="48" cy="652" r="12" fill="none" stroke={primary} strokeWidth="2" />
+          <circle cx="952" cy="652" r="12" fill="none" stroke={primary} strokeWidth="2" />
         </g>
       )}
 
-      {/* ─── 8. Custom Border Builder (Parametric) ───────────────────── */}
+      {/* ─── 8. Custom Border Builder (Parametric Sliders) ──────────────── */}
       {style === 'custom-builder' && (
         <g>
           <rect
-            x="20"
-            y="20"
-            width="960"
-            height="660"
+            x={theme.customBorderInset || 20}
+            y={theme.customBorderInset || 20}
+            width={1000 - (theme.customBorderInset || 20) * 2}
+            height={700 - (theme.customBorderInset || 20) * 2}
             fill="none"
             stroke={primary}
             strokeWidth={theme.customBorderWidth || 4}
           />
-          <rect
-            x="32"
-            y="32"
-            width="936"
-            height="636"
-            fill="none"
-            stroke={secondary}
-            strokeWidth="1.5"
-            strokeDasharray="5 3"
-          />
-          {theme.customCornerStyle === 'star' && (
-            <>
-              <polygon points="40,32 42,38 48,39 44,43 45,49 40,46 35,49 36,43 32,39 38,38" fill={primary} />
-              <polygon points="960,32 962,38 968,39 964,43 965,49 960,46 955,49 956,43 952,39 958,38" fill={primary} />
-              <polygon points="40,652 42,658 48,659 44,663 45,669 40,666 35,669 36,663 32,659 38,658" fill={primary} />
-              <polygon points="960,652 962,658 968,659 964,663 965,669 960,666 955,669 956,663 952,659 958,658" fill={primary} />
-            </>
+          {(theme.customInnerBorderWidth ?? 2) > 0 && (
+            <rect
+              x={(theme.customBorderInset || 20) + (theme.customBorderWidth || 4) + 6}
+              y={(theme.customBorderInset || 20) + (theme.customBorderWidth || 4) + 6}
+              width={1000 - ((theme.customBorderInset || 20) + (theme.customBorderWidth || 4) + 6) * 2}
+              height={700 - ((theme.customBorderInset || 20) + (theme.customBorderWidth || 4) + 6) * 2}
+              fill="none"
+              stroke={secondary}
+              strokeWidth={theme.customInnerBorderWidth ?? 2}
+            />
           )}
         </g>
       )}
@@ -776,6 +766,271 @@ export function CertificateThumbnail({
 
 // ─── 100% RELIABLE CERTIFICATE EXPORT UTILITIES ─────────────────────────
 
+export async function drawBorderOnCanvas(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  theme: CertificateTemplate['theme']
+) {
+  const p = theme.primary || '#C59B27';
+  const s = theme.secondary || '#0F2C59';
+  const style = theme.borderStyle;
+
+  if (style === 'none') return;
+
+  if (style === 'custom-upload' && theme.customBorderUrl) {
+    try {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = reject;
+        img.src = theme.customBorderUrl!;
+      });
+      const inset = (theme.customBorderInset || 0) * (width / 1000);
+      const scale = (theme.customBorderScale || 100) / 100;
+      const fit = theme.customBorderFit || 'fill';
+
+      ctx.save();
+      const drawW = (width - inset * 2) * scale;
+      const drawH = (height - inset * 2) * scale;
+      const drawX = (width - drawW) / 2;
+      const drawY = (height - drawH) / 2;
+
+      if (fit === 'contain') {
+        const imgAspect = img.naturalWidth / img.naturalHeight;
+        const targetAspect = drawW / drawH;
+        let finalW = drawW;
+        let finalH = drawH;
+        if (targetAspect > imgAspect) {
+          finalW = drawH * imgAspect;
+        } else {
+          finalH = drawW / imgAspect;
+        }
+        ctx.drawImage(img, (width - finalW) / 2, (height - finalH) / 2, finalW, finalH);
+      } else {
+        ctx.drawImage(img, drawX, drawY, drawW, drawH);
+      }
+      ctx.restore();
+      return;
+    } catch (e) {
+      console.error('Failed to load custom border image for canvas export', e);
+    }
+  }
+
+  const scaleFactor = width / 1000;
+
+  if (style === 'executive-double' || style === 'royal-guilloche') {
+    ctx.strokeStyle = p;
+    ctx.lineWidth = 7 * scaleFactor;
+    ctx.strokeRect(36, 36, width - 72, height - 72);
+
+    ctx.lineWidth = 2.5 * scaleFactor;
+    ctx.strokeStyle = p;
+    ctx.strokeRect(52, 52, width - 104, height - 104);
+
+    if (theme.cornerOrnaments) {
+      ctx.fillStyle = p;
+      const corners = [
+        { x: 36, y: 36 },
+        { x: width - 36, y: 36 },
+        { x: 36, y: height - 36 },
+        { x: width - 36, y: height - 36 },
+      ];
+      corners.forEach((c) => {
+        ctx.fillRect(c.x - 10, c.y - 10, 20, 20);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(c.x - 4, c.y - 4, 8, 8);
+        ctx.fillStyle = p;
+      });
+    }
+  } else if (style === 'institutional-triple' || style === 'diploma-triple') {
+    ctx.strokeStyle = p;
+    ctx.lineWidth = 8 * scaleFactor;
+    ctx.strokeRect(30, 30, width - 60, height - 60);
+
+    ctx.lineWidth = 1.5 * scaleFactor;
+    ctx.strokeStyle = `${p}90`;
+    ctx.strokeRect(46, 46, width - 92, height - 92);
+
+    ctx.lineWidth = 3.5 * scaleFactor;
+    ctx.strokeStyle = s;
+    ctx.strokeRect(56, 56, width - 112, height - 112);
+
+    const corners = [
+      { x: 42, y: 42 },
+      { x: width - 42, y: 42 },
+      { x: 42, y: height - 42 },
+      { x: width - 42, y: height - 42 },
+    ];
+    corners.forEach((c) => {
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, 16 * scaleFactor, 0, Math.PI * 2);
+      ctx.fillStyle = p;
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, 7 * scaleFactor, 0, Math.PI * 2);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fill();
+    });
+  } else if (style === 'luxury-gold' || style === 'victorian-filigree') {
+    ctx.strokeStyle = p;
+    ctx.lineWidth = 5 * scaleFactor;
+    ctx.strokeRect(32, 32, width - 64, height - 64);
+
+    ctx.lineWidth = 1.5 * scaleFactor;
+    ctx.strokeStyle = `${p}80`;
+    ctx.strokeRect(48, 48, width - 96, height - 96);
+
+    ctx.lineWidth = 1 * scaleFactor;
+    ctx.setLineDash([8, 4]);
+    ctx.strokeRect(60, 60, width - 120, height - 120);
+    ctx.setLineDash([]);
+
+    ctx.fillStyle = p;
+    const corners = [
+      { x: 48, y: 48 },
+      { x: width - 48, y: 48 },
+      { x: 48, y: height - 48 },
+      { x: width - 48, y: height - 48 },
+    ];
+    corners.forEach((c) => {
+      ctx.beginPath();
+      ctx.moveTo(c.x, c.y - 14 * scaleFactor);
+      ctx.lineTo(c.x + 14 * scaleFactor, c.y);
+      ctx.lineTo(c.x, c.y + 14 * scaleFactor);
+      ctx.lineTo(c.x - 14 * scaleFactor, c.y);
+      ctx.closePath();
+      ctx.fill();
+    });
+  } else if (style === 'modern-minimalist' || style === 'modern-geometric') {
+    ctx.strokeStyle = p;
+    ctx.lineWidth = 2.5 * scaleFactor;
+    ctx.strokeRect(38, 38, width - 76, height - 76);
+
+    ctx.strokeStyle = s;
+    ctx.lineWidth = 5 * scaleFactor;
+    const bracketSize = 50 * scaleFactor;
+    ctx.beginPath();
+    ctx.moveTo(26, 26 + bracketSize);
+    ctx.lineTo(26, 26);
+    ctx.lineTo(26 + bracketSize, 26);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(width - 26, 26 + bracketSize);
+    ctx.lineTo(width - 26, 26);
+    ctx.lineTo(width - 26 - bracketSize, 26);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(26, height - 26 - bracketSize);
+    ctx.lineTo(26, height - 26);
+    ctx.lineTo(26 + bracketSize, height - 26);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(width - 26, height - 26 - bracketSize);
+    ctx.lineTo(width - 26, height - 26);
+    ctx.lineTo(width - 26 - bracketSize, height - 26);
+    ctx.stroke();
+  } else if (style === 'greek-meander') {
+    ctx.strokeStyle = p;
+    ctx.lineWidth = 5 * scaleFactor;
+    ctx.strokeRect(30, 30, width - 60, height - 60);
+
+    ctx.lineWidth = 2.5 * scaleFactor;
+    ctx.strokeRect(52, 52, width - 104, height - 104);
+
+    const corners = [
+      { x: 52, y: 52 },
+      { x: width - 52, y: 52 },
+      { x: 52, y: height - 52 },
+      { x: width - 52, y: height - 52 },
+    ];
+    corners.forEach((c) => {
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, 20 * scaleFactor, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, 9 * scaleFactor, 0, Math.PI * 2);
+      ctx.fillStyle = p;
+      ctx.fill();
+    });
+  } else if (style === 'art-deco') {
+    ctx.strokeStyle = p;
+    ctx.lineWidth = 3.5 * scaleFactor;
+    ctx.strokeRect(32, 32, width - 64, height - 64);
+    ctx.lineWidth = 6 * scaleFactor;
+    ctx.strokeRect(48, 48, width - 96, height - 96);
+    ctx.lineWidth = 2 * scaleFactor;
+    ctx.strokeRect(66, 66, width - 132, height - 132);
+
+    ctx.fillStyle = p;
+    const sz = 60 * scaleFactor;
+    ctx.beginPath();
+    ctx.moveTo(32, 32);
+    ctx.lineTo(32 + sz, 32);
+    ctx.lineTo(32, 32 + sz);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(width - 32, 32);
+    ctx.lineTo(width - 32 - sz, 32);
+    ctx.lineTo(width - 32, 32 + sz);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(32, height - 32);
+    ctx.lineTo(32 + sz, height - 32);
+    ctx.lineTo(32, height - 32 - sz);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(width - 32, height - 32);
+    ctx.lineTo(width - 32 - sz, height - 32);
+    ctx.lineTo(width - 32, height - 32 - sz);
+    ctx.closePath();
+    ctx.fill();
+  } else if (style === 'celtic-knot') {
+    ctx.strokeStyle = p;
+    ctx.lineWidth = 5 * scaleFactor;
+    ctx.strokeRect(34, 34, width - 68, height - 68);
+
+    ctx.lineWidth = 2.5 * scaleFactor;
+    ctx.setLineDash([12, 6]);
+    ctx.strokeRect(52, 52, width - 104, height - 104);
+    ctx.setLineDash([]);
+
+    const corners = [
+      { x: 52, y: 52 },
+      { x: width - 52, y: 52 },
+      { x: 52, y: height - 52 },
+      { x: width - 52, y: height - 52 },
+    ];
+    corners.forEach((c) => {
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, 18 * scaleFactor, 0, Math.PI * 2);
+      ctx.stroke();
+    });
+  } else if (style === 'custom-builder') {
+    const inset = (theme.customBorderInset || 20) * scaleFactor;
+    const outerW = (theme.customBorderWidth || 4) * scaleFactor;
+    const innerW = (theme.customInnerBorderWidth ?? 2) * scaleFactor;
+
+    ctx.strokeStyle = p;
+    ctx.lineWidth = outerW;
+    ctx.strokeRect(inset, inset, width - inset * 2, height - inset * 2);
+
+    if (innerW > 0) {
+      const gap = (outerW + 8) * scaleFactor;
+      ctx.strokeStyle = s;
+      ctx.lineWidth = innerW;
+      ctx.strokeRect(inset + gap, inset + gap, width - (inset + gap) * 2, height - (inset + gap) * 2);
+    }
+  }
+}
+
 export async function downloadCertificateAsImage(template: CertificateTemplate, format: 'png' | 'jpeg' = 'png') {
   const isLandscape = template.orientation === 'landscape';
   const width = isLandscape ? 1700 : 1200;
@@ -791,43 +1046,11 @@ export async function downloadCertificateAsImage(template: CertificateTemplate, 
   ctx.fillStyle = template.theme.paperTint || '#FFFFFF';
   ctx.fillRect(0, 0, width, height);
 
-  // 2. Draw Decorative Border
+  // 2. Draw Accurate Chosen Border or Custom Uploaded Frame
+  await drawBorderOnCanvas(ctx, width, height, template.theme);
+
   const p = template.theme.primary || '#C59B27';
   const s = template.theme.secondary || '#0F2C59';
-  ctx.strokeStyle = p;
-
-  // Outer primary rule
-  ctx.lineWidth = 8;
-  ctx.strokeRect(36, 36, width - 72, height - 72);
-
-  // Middle thin rule
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = `${p}90`;
-  ctx.strokeRect(52, 52, width - 104, height - 104);
-
-  // Inner dashed rule
-  ctx.lineWidth = 3;
-  ctx.setLineDash([12, 6]);
-  ctx.strokeStyle = `${p}60`;
-  ctx.strokeRect(66, 66, width - 132, height - 132);
-  ctx.setLineDash([]); // Reset dash
-
-  // Corner Ornaments
-  if (template.theme.cornerOrnaments) {
-    ctx.fillStyle = p;
-    // 4 Corner Medallions
-    const corners = [
-      { x: 36, y: 36 },
-      { x: width - 36, y: 36 },
-      { x: 36, y: height - 36 },
-      { x: width - 36, y: height - 36 },
-    ];
-    corners.forEach((c) => {
-      ctx.beginPath();
-      ctx.arc(c.x, c.y, 16, 0, Math.PI * 2);
-      ctx.fill();
-    });
-  }
 
   // 3. Central Typography
   const isDark = template.theme.paperTint === '#0F1117';
@@ -964,6 +1187,177 @@ export async function downloadCertificateAsImage(template: CertificateTemplate, 
   }, format === 'jpeg' ? 'image/jpeg' : 'image/png', 0.95);
 }
 
+function hexToPdfRgb(hex: string) {
+  const clean = (hex || '#C59B27').replace('#', '');
+  const bigint = parseInt(clean.length === 3 ? clean.split('').map((c) => c + c).join('') : clean, 16);
+  const r = ((bigint >> 16) & 255) / 255;
+  const g = ((bigint >> 8) & 255) / 255;
+  const b = (bigint & 255) / 255;
+  return rgb(isNaN(r) ? 0.77 : r, isNaN(g) ? 0.6 : g, isNaN(b) ? 0.15 : b);
+}
+
+async function drawBorderOnPdf(
+  page: any,
+  pdfDoc: any,
+  width: number,
+  height: number,
+  theme: CertificateTemplate['theme']
+) {
+  const p = hexToPdfRgb(theme.primary || '#C59B27');
+  const s = hexToPdfRgb(theme.secondary || '#0F2C59');
+  const style = theme.borderStyle;
+
+  if (style === 'none') return;
+
+  if (style === 'custom-upload' && theme.customBorderUrl) {
+    try {
+      const imgBytes = await fetch(theme.customBorderUrl).then((r) => r.arrayBuffer());
+      let embeddedImg;
+      if (theme.customBorderUrl.startsWith('data:image/jpeg') || theme.customBorderUrl.endsWith('.jpg') || theme.customBorderUrl.endsWith('.jpeg')) {
+        embeddedImg = await pdfDoc.embedJpg(imgBytes);
+      } else {
+        embeddedImg = await pdfDoc.embedPng(imgBytes);
+      }
+      const inset = theme.customBorderInset || 0;
+      const scale = (theme.customBorderScale || 100) / 100;
+      const drawW = (width - inset * 2) * scale;
+      const drawH = (height - inset * 2) * scale;
+      const drawX = (width - drawW) / 2;
+      const drawY = (height - drawH) / 2;
+
+      page.drawImage(embeddedImg, {
+        x: drawX,
+        y: drawY,
+        width: drawW,
+        height: drawH,
+      });
+      return;
+    } catch (e) {
+      console.error('Failed to embed custom border image into PDF', e);
+    }
+  }
+
+  if (style === 'executive-double' || style === 'royal-guilloche') {
+    page.drawRectangle({
+      x: 24,
+      y: 24,
+      width: width - 48,
+      height: height - 48,
+      borderColor: p,
+      borderWidth: 3.5,
+    });
+    page.drawRectangle({
+      x: 34,
+      y: 34,
+      width: width - 68,
+      height: height - 68,
+      borderColor: p,
+      borderWidth: 1.5,
+    });
+  } else if (style === 'institutional-triple' || style === 'diploma-triple') {
+    page.drawRectangle({
+      x: 20,
+      y: 20,
+      width: width - 40,
+      height: height - 40,
+      borderColor: p,
+      borderWidth: 4,
+    });
+    page.drawRectangle({
+      x: 30,
+      y: 30,
+      width: width - 60,
+      height: height - 60,
+      borderColor: p,
+      borderWidth: 1,
+    });
+    page.drawRectangle({
+      x: 36,
+      y: 36,
+      width: width - 72,
+      height: height - 72,
+      borderColor: s,
+      borderWidth: 2,
+    });
+  } else if (style === 'luxury-gold' || style === 'victorian-filigree') {
+    page.drawRectangle({
+      x: 22,
+      y: 22,
+      width: width - 44,
+      height: height - 44,
+      borderColor: p,
+      borderWidth: 2.5,
+    });
+    page.drawRectangle({
+      x: 32,
+      y: 32,
+      width: width - 64,
+      height: height - 64,
+      borderColor: p,
+      borderWidth: 1,
+    });
+  } else if (style === 'modern-minimalist' || style === 'modern-geometric') {
+    page.drawRectangle({
+      x: 24,
+      y: 24,
+      width: width - 48,
+      height: height - 48,
+      borderColor: p,
+      borderWidth: 1.5,
+    });
+    const bLen = 24;
+    page.drawLine({ start: { x: 16, y: 16 + bLen }, end: { x: 16, y: 16 }, color: s, thickness: 2.5 });
+    page.drawLine({ start: { x: 16, y: 16 }, end: { x: 16 + bLen, y: 16 }, color: s, thickness: 2.5 });
+    page.drawLine({ start: { x: width - 16, y: 16 + bLen }, end: { x: width - 16, y: 16 }, color: s, thickness: 2.5 });
+    page.drawLine({ start: { x: width - 16, y: 16 }, end: { x: width - 16 - bLen, y: 16 }, color: s, thickness: 2.5 });
+    page.drawLine({ start: { x: 16, y: height - 16 - bLen }, end: { x: 16, y: height - 16 }, color: s, thickness: 2.5 });
+    page.drawLine({ start: { x: 16, y: height - 16 }, end: { x: 16 + bLen, y: height - 16 }, color: s, thickness: 2.5 });
+    page.drawLine({ start: { x: width - 16, y: height - 16 - bLen }, end: { x: width - 16, y: height - 16 }, color: s, thickness: 2.5 });
+    page.drawLine({ start: { x: width - 16, y: height - 16 }, end: { x: width - 16 - bLen, y: height - 16 }, color: s, thickness: 2.5 });
+  } else if (style === 'greek-meander' || style === 'art-deco' || style === 'celtic-knot') {
+    page.drawRectangle({
+      x: 20,
+      y: 20,
+      width: width - 40,
+      height: height - 40,
+      borderColor: p,
+      borderWidth: 3,
+    });
+    page.drawRectangle({
+      x: 32,
+      y: 32,
+      width: width - 64,
+      height: height - 64,
+      borderColor: p,
+      borderWidth: 1.5,
+    });
+  } else if (style === 'custom-builder') {
+    const inset = theme.customBorderInset || 20;
+    const outerW = (theme.customBorderWidth || 4) * 0.7;
+    const innerW = (theme.customInnerBorderWidth ?? 2) * 0.7;
+
+    page.drawRectangle({
+      x: inset,
+      y: inset,
+      width: width - inset * 2,
+      height: height - inset * 2,
+      borderColor: p,
+      borderWidth: outerW,
+    });
+    if (innerW > 0) {
+      const gap = outerW + 6;
+      page.drawRectangle({
+        x: inset + gap,
+        y: inset + gap,
+        width: width - (inset + gap) * 2,
+        height: height - (inset + gap) * 2,
+        borderColor: s,
+        borderWidth: innerW,
+      });
+    }
+  }
+}
+
 export async function downloadCertificateAsPdf(template: CertificateTemplate) {
   const pdfDoc = await PDFDocument.create();
   const isLandscape = template.orientation === 'landscape';
@@ -975,24 +1369,11 @@ export async function downloadCertificateAsPdf(template: CertificateTemplate) {
   const fontTimesBold = await pdfDoc.embedFont(StandardFonts.TimesRomanBold);
   const fontTimesItalic = await pdfDoc.embedFont(StandardFonts.TimesRomanItalic);
 
-  // Border Rectangles
-  page.drawRectangle({
-    x: 24,
-    y: 24,
-    width: width - 48,
-    height: height - 48,
-    borderColor: rgb(0.77, 0.6, 0.15),
-    borderWidth: 3,
-  });
+  const p = hexToPdfRgb(template.theme.primary || '#C59B27');
+  const s = hexToPdfRgb(template.theme.secondary || '#0F2C59');
 
-  page.drawRectangle({
-    x: 32,
-    y: 32,
-    width: width - 64,
-    height: height - 64,
-    borderColor: rgb(0.77, 0.6, 0.15),
-    borderWidth: 1,
-  });
+  // Draw Exact Selected Border or Custom Uploaded Frame
+  await drawBorderOnPdf(page, pdfDoc, width, height, template.theme);
 
   // Organization
   const orgText = template.data.organization.toUpperCase();
@@ -1002,7 +1383,7 @@ export async function downloadCertificateAsPdf(template: CertificateTemplate) {
     y: height - 100,
     size: 14,
     font: fontBold,
-    color: rgb(0.77, 0.6, 0.15),
+    color: p,
   });
 
   // Title
@@ -1013,7 +1394,7 @@ export async function downloadCertificateAsPdf(template: CertificateTemplate) {
     y: height - 150,
     size: 26,
     font: fontTimesBold,
-    color: rgb(0.06, 0.17, 0.35),
+    color: s,
   });
 
   // Presentation Text
@@ -1035,12 +1416,11 @@ export async function downloadCertificateAsPdf(template: CertificateTemplate) {
     y: height - 260,
     size: 36,
     font: fontTimesBold,
-    color: rgb(0.06, 0.17, 0.35),
+    color: s,
   });
 
   // Description
   const descText = template.data.description;
-  const descWidth = Math.min(fontRegular.widthOfTextAtSize(descText, 11), width - 200);
   page.drawText(descText.substring(0, 110) + '...', {
     x: 100,
     y: height - 320,
@@ -1264,80 +1644,127 @@ export default function CertificatePage() {
   const subtextColor = isDarkMode ? '#94A3B8' : '#64748B';
 
   return (
-    <div className="min-h-screen bg-surface-950 text-surface-100 flex flex-col">
+    <div className="h-screen max-h-screen overflow-hidden bg-surface-950 text-surface-100 flex flex-col">
       <Navbar />
 
-      {/* Top Header Banner */}
-      <div className="bg-gradient-to-r from-surface-950 via-surface-900 to-surface-950 border-b border-surface-800/80 px-6 py-4">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-500 to-yellow-600 flex items-center justify-center shadow-lg shadow-amber-500/20">
-              <Award className="w-5 h-5 text-black font-black" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-lg font-black text-white tracking-tight">
-                  Certificate <span className="text-amber-400">Studio & Creator</span>
-                </h1>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-mono font-bold border border-amber-500/30">
-                  PRO TOOL
-                </span>
-              </div>
-              <p className="text-xs text-surface-400">
-                Design custom certificates from scratch or customize templates with authentic borders, seals & signatures.
-              </p>
-            </div>
+      {/* Unified Pro Studio Header */}
+      <header className="h-14 bg-surface-900 border-b border-surface-800 px-4 sm:px-6 flex items-center justify-between shrink-0 z-30">
+        {/* Left: Studio Branding, Document Title & Orientation */}
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-amber-500 to-yellow-600 flex items-center justify-center shadow-md shadow-amber-500/20 shrink-0">
+            <Award className="w-4 h-4 text-black font-black" />
           </div>
-
-          {/* Top Tabs */}
           <div className="flex items-center gap-2">
+            <span className="text-xs sm:text-sm font-black text-white tracking-tight hidden sm:inline">
+              Certificate <span className="text-amber-400">Studio</span>
+            </span>
+            <span className="text-surface-600 hidden sm:inline">•</span>
+            <input
+              type="text"
+              value={activeTemplate.title}
+              onChange={(e) => setActiveTemplate((p) => ({ ...p, title: e.target.value }))}
+              className="text-xs font-semibold text-white bg-surface-950/80 border border-surface-700/80 rounded-lg px-2.5 py-1 max-w-[140px] sm:max-w-[200px] truncate focus:outline-none focus:border-amber-500"
+              title="Click to rename certificate"
+            />
             <button
-              onClick={() => setActiveTab('studio')}
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-                activeTab === 'studio'
-                  ? 'bg-amber-500 text-black font-bold shadow-md shadow-amber-500/20'
-                  : 'text-surface-300 hover:text-white hover:bg-surface-800'
-              }`}
+              onClick={() =>
+                setActiveTemplate((p) => ({
+                  ...p,
+                  orientation: p.orientation === 'landscape' ? 'portrait' : 'landscape',
+                }))
+              }
+              className="px-2 py-1 rounded-lg text-[10px] font-bold bg-surface-800 hover:bg-surface-700 text-surface-300 border border-surface-700 uppercase transition-colors"
+              title="Toggle Landscape / Portrait"
             >
-              <PenTool className="w-3.5 h-3.5" />
-              <span>Studio Editor</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('marketplace')}
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-                activeTab === 'marketplace'
-                  ? 'bg-amber-500 text-black font-bold shadow-md shadow-amber-500/20'
-                  : 'text-surface-300 hover:text-white hover:bg-surface-800'
-              }`}
-            >
-              <Award className="w-3.5 h-3.5" />
-              <span>Template Marketplace</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('my-templates')}
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-                activeTab === 'my-templates'
-                  ? 'bg-amber-500 text-black font-bold shadow-md shadow-amber-500/20'
-                  : 'text-surface-300 hover:text-white hover:bg-surface-800'
-              }`}
-            >
-              <Layers className="w-3.5 h-3.5" />
-              <span>My Templates ({userTemplates.length})</span>
-            </button>
-
-            <button
-              onClick={handleStartFromScratch}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-primary-600 hover:bg-primary-500 text-white shadow-md shadow-primary-500/25 ml-2"
-              title="Start a fresh blank certificate design"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>New From Scratch</span>
+              {activeTemplate.orientation}
             </button>
           </div>
         </div>
-      </div>
+
+        {/* Center: Main View Navigation */}
+        <div className="flex items-center gap-1 bg-surface-950 p-1 rounded-xl border border-surface-800">
+          <button
+            onClick={() => setActiveTab('studio')}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+              activeTab === 'studio'
+                ? 'bg-amber-500 text-black font-bold shadow-xs'
+                : 'text-surface-400 hover:text-white'
+            }`}
+          >
+            <PenTool className="w-3.5 h-3.5" />
+            <span className="hidden md:inline">Studio Editor</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('marketplace')}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+              activeTab === 'marketplace'
+                ? 'bg-amber-500 text-black font-bold shadow-xs'
+                : 'text-surface-400 hover:text-white'
+            }`}
+          >
+            <Award className="w-3.5 h-3.5" />
+            <span className="hidden md:inline">Marketplace</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('my-templates')}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+              activeTab === 'my-templates'
+                ? 'bg-amber-500 text-black font-bold shadow-xs'
+                : 'text-surface-400 hover:text-white'
+            }`}
+          >
+            <Layers className="w-3.5 h-3.5" />
+            <span className="hidden md:inline">My Templates ({userTemplates.length})</span>
+          </button>
+        </div>
+
+        {/* Right: Actions */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleStartFromScratch}
+            className="hidden xl:flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-surface-300 hover:text-white hover:bg-surface-800 transition-colors"
+            title="Start from scratch"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Blank</span>
+          </button>
+
+          {activeTab === 'studio' && (
+            <>
+              <button
+                onClick={() => setShowPublishModal(true)}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-amber-300 hover:bg-amber-500/10 border border-amber-500/30 transition-colors"
+                title="Publish / Save Template"
+              >
+                <Share2 className="w-3.5 h-3.5 text-amber-400" />
+                <span className="hidden sm:inline">Save</span>
+              </button>
+
+              <button
+                onClick={handleDownloadPNG}
+                disabled={isExporting}
+                className="btn-primary text-xs px-3 py-1.5 flex items-center gap-1.5 shadow-md shadow-primary-500/20"
+                title="Download High-Res 2x PNG Image"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>PNG</span>
+              </button>
+
+              <button
+                onClick={handleDownloadPDF}
+                disabled={isExporting}
+                className="btn-secondary text-xs px-3 py-1.5 flex items-center gap-1.5 border border-surface-700 hover:border-emerald-500 text-white"
+                title="Download Vector PDF"
+              >
+                <FileText className="w-3.5 h-3.5 text-emerald-400" />
+                <span>PDF</span>
+              </button>
+            </>
+          )}
+        </div>
+      </header>
 
       {/* Success Notification */}
       {exportSuccess && (
@@ -1349,11 +1776,11 @@ export default function CertificatePage() {
 
       {/* ─── TAB 1: STUDIO EDITOR ────────────────────────────────────────── */}
       {activeTab === 'studio' && (
-        <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
-          {/* Left Control Panel */}
-          <aside className="w-full lg:w-[430px] bg-surface-900 border-b lg:border-b-0 lg:border-r border-surface-800 flex flex-col shrink-0 overflow-y-auto max-h-[45vh] lg:max-h-[calc(100vh-130px)]">
+        <div className="flex-1 flex flex-col lg:flex-row overflow-hidden min-h-0">
+          {/* Left Control Panel (Independently scrollable) */}
+          <aside className="w-full lg:w-[420px] bg-surface-900 border-b lg:border-b-0 lg:border-r border-surface-800 flex flex-col shrink-0 h-full overflow-y-auto min-h-0">
             {/* Studio Tools Navigation */}
-            <div className="grid grid-cols-5 p-2 bg-surface-950/80 border-b border-surface-800 text-[11px] font-semibold">
+            <div className="grid grid-cols-5 p-2 bg-surface-950/90 border-b border-surface-800 text-[11px] font-semibold sticky top-0 z-20 backdrop-blur-md">
               {[
                 { id: 'border', label: 'Border', icon: Layout },
                 { id: 'content', label: 'Content', icon: FileText },
@@ -1381,28 +1808,28 @@ export default function CertificatePage() {
             </div>
 
             <div className="p-5 space-y-6">
-              {/* ─── TOOL TAB 1: ACCURATE BORDERS & FRAMES ──────────────────── */}
+              {/* ─── TOOL TAB 1: ACCURATE CLEAN BORDERS & FRAMES ──────────────────── */}
               {studioToolTab === 'border' && (
                 <div className="space-y-5">
                   <div>
                     <label className="text-xs font-bold text-white block mb-1">
-                      Accurate Certificate Border Style
+                      Professional Certificate Border Style
                     </label>
                     <p className="text-[11px] text-surface-400 mb-3">
-                      Select an authentic designed certificate frame or upload your own graphic.
+                      Clean executive, institutional & geometric certificate borders.
                     </p>
 
                     <div className="grid grid-cols-2 gap-2">
                       {[
-                        { id: 'royal-guilloche', label: 'Imperial Guilloche', desc: 'True interwoven lace loops & baroque scrolls' },
-                        { id: 'victorian-filigree', label: 'Victorian Filigree', desc: 'Deep acanthus leaf corner brackets' },
-                        { id: 'greek-meander', label: 'Greek Key Fretwork', desc: 'Labyrinthine chain & corner rosettes' },
-                        { id: 'diploma-triple', label: 'University Triple', desc: 'Heavy outer band & fleur-de-lis' },
-                        { id: 'celtic-knot', label: 'Celtic Knot Heritage', desc: 'Intertwined braid with corner shields' },
-                        { id: 'art-deco', label: 'Art Deco Chevron', desc: '1920s stepped geometric gold lines' },
-                        { id: 'modern-geometric', label: 'Modern Executive', desc: 'Precision dual rules & corner crosses' },
-                        { id: 'custom-builder', label: 'Custom Builder', desc: 'Parametric custom thickness & style' },
-                        { id: 'none', label: 'Clean Borderless', desc: 'No decorative outer frame' },
+                        { id: 'executive-double', label: 'Executive Double', desc: 'Sharp dual pinstripe with corner notches' },
+                        { id: 'institutional-triple', label: 'Institutional Triple', desc: 'Academic triple frame with rosette accents' },
+                        { id: 'modern-minimalist', label: 'Modern Minimalist', desc: 'Hairline frame with precision corner brackets' },
+                        { id: 'luxury-gold', label: 'Luxury Gold', desc: 'Multi-tier gold rules with diamond insets' },
+                        { id: 'greek-meander', label: 'Greek Key Fretwork', desc: 'Geometric fret chain & concentric rosettes' },
+                        { id: 'art-deco', label: 'Art Deco Chevron', desc: 'Architectural stepped 45° corner bevels' },
+                        { id: 'celtic-knot', label: 'Celtic Geometry', desc: 'Dual rule with corner quad rings' },
+                        { id: 'custom-builder', label: 'Custom Builder', desc: 'Parametric thickness, inset & inner rule' },
+                        { id: 'none', label: 'Clean Borderless', desc: 'Minimalist layout without outer frame' },
                       ].map((b) => (
                         <button
                           key={b.id}
@@ -1425,12 +1852,17 @@ export default function CertificatePage() {
                     </div>
                   </div>
 
-                  {/* Upload Custom Border Graphic */}
-                  <div className="p-3.5 bg-surface-950 rounded-xl border border-surface-800">
-                    <span className="text-xs font-bold text-white block mb-1">Upload Custom Border Frame</span>
-                    <span className="text-[10px] text-surface-400 block mb-3">
-                      Upload any transparent PNG or SVG border frame from your computer to use directly.
-                    </span>
+                  {/* Upload Custom Border Frame & Resizing Controls */}
+                  <div className="p-3.5 bg-surface-950 rounded-xl border border-surface-800 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-white">Import Custom Border Frame</span>
+                      {activeTemplate.theme.customBorderUrl && (
+                        <span className="text-[10px] text-amber-400 font-mono">Custom Active</span>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-surface-400">
+                      Upload any transparent PNG or SVG border frame and scale or resize it to fit your certificate.
+                    </p>
                     <input
                       type="file"
                       ref={borderInputRef}
@@ -1442,7 +1874,14 @@ export default function CertificatePage() {
                           handleFileUpload(f, (url) => {
                             setActiveTemplate((p) => ({
                               ...p,
-                              theme: { ...p.theme, customBorderUrl: url, borderStyle: 'custom-upload' },
+                              theme: {
+                                ...p.theme,
+                                customBorderUrl: url,
+                                borderStyle: 'custom-upload',
+                                customBorderInset: p.theme.customBorderInset ?? 10,
+                                customBorderScale: p.theme.customBorderScale ?? 100,
+                                customBorderFit: p.theme.customBorderFit ?? 'fill',
+                              },
                             }));
                           });
                         }
@@ -1455,7 +1894,7 @@ export default function CertificatePage() {
                         className="btn-ghost text-xs py-1.5 px-3 border border-surface-700 hover:border-amber-500 flex items-center gap-1.5"
                       >
                         <Upload className="w-3.5 h-3.5 text-amber-400" />
-                        <span>Upload Border File</span>
+                        <span>{activeTemplate.theme.customBorderUrl ? 'Replace Frame File' : 'Upload Frame File'}</span>
                       </button>
                       {activeTemplate.theme.customBorderUrl && (
                         <button
@@ -1463,22 +1902,97 @@ export default function CertificatePage() {
                           onClick={() =>
                             setActiveTemplate((p) => ({
                               ...p,
-                              theme: { ...p.theme, customBorderUrl: undefined, borderStyle: 'royal-guilloche' },
+                              theme: { ...p.theme, customBorderUrl: undefined, borderStyle: 'executive-double' },
                             }))
                           }
-                          className="btn-ghost text-xs p-1.5 text-red-400"
+                          className="btn-ghost text-xs p-1.5 text-red-400 hover:bg-red-500/10"
+                          title="Remove custom frame"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       )}
                     </div>
+
+                    {/* Frame Resize Sliders (Inset, Scale, Fit) */}
+                    {(activeTemplate.theme.borderStyle === 'custom-upload' || activeTemplate.theme.customBorderUrl) && (
+                      <div className="space-y-3 pt-2 border-t border-surface-800">
+                        <div>
+                          <div className="flex justify-between text-[11px] text-surface-300 mb-1">
+                            <span>Frame Inset Padding</span>
+                            <span className="font-mono text-amber-400">{activeTemplate.theme.customBorderInset || 0}px</span>
+                          </div>
+                          <input
+                            type="range"
+                            min={0}
+                            max={60}
+                            value={activeTemplate.theme.customBorderInset || 0}
+                            onChange={(e) =>
+                              setActiveTemplate((p) => ({
+                                ...p,
+                                theme: { ...p.theme, customBorderInset: parseInt(e.target.value) },
+                              }))
+                            }
+                            className="w-full accent-amber-500"
+                          />
+                        </div>
+
+                        <div>
+                          <div className="flex justify-between text-[11px] text-surface-300 mb-1">
+                            <span>Frame Scale</span>
+                            <span className="font-mono text-amber-400">{activeTemplate.theme.customBorderScale || 100}%</span>
+                          </div>
+                          <input
+                            type="range"
+                            min={60}
+                            max={140}
+                            value={activeTemplate.theme.customBorderScale || 100}
+                            onChange={(e) =>
+                              setActiveTemplate((p) => ({
+                                ...p,
+                                theme: { ...p.theme, customBorderScale: parseInt(e.target.value) },
+                              }))
+                            }
+                            className="w-full accent-amber-500"
+                          />
+                        </div>
+
+                        <div>
+                          <span className="text-[11px] text-surface-300 block mb-1">Frame Fit Mode</span>
+                          <div className="grid grid-cols-3 gap-1">
+                            {[
+                              { id: 'fill', label: 'Stretch (Fill)' },
+                              { id: 'contain', label: 'Keep Ratio' },
+                              { id: 'cover', label: 'Full Cover' },
+                            ].map((mode) => (
+                              <button
+                                key={mode.id}
+                                type="button"
+                                onClick={() =>
+                                  setActiveTemplate((p) => ({
+                                    ...p,
+                                    theme: { ...p.theme, customBorderFit: mode.id as any },
+                                  }))
+                                }
+                                className={`py-1 px-1.5 rounded text-[10px] font-bold border transition-colors ${
+                                  (activeTemplate.theme.customBorderFit || 'fill') === mode.id
+                                    ? 'border-amber-500 bg-amber-500/20 text-amber-300'
+                                    : 'border-surface-800 bg-surface-900 text-surface-400 hover:text-white'
+                                }`}
+                              >
+                                {mode.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Corner Ornaments Toggle */}
                   <div className="flex items-center justify-between p-3 bg-surface-950 rounded-xl border border-surface-800">
                     <div>
-                      <span className="text-xs font-semibold text-white block">Corner Ornaments</span>
-                      <span className="text-[10px] text-surface-400 block">Flourishes, crests & medallions on corners</span>
+                      <span className="text-xs font-semibold text-white block">Corner Accents</span>
+                      <span className="text-[10px] text-surface-400 block">Corner notches, brackets & precision marks</span>
                     </div>
                     <button
                       type="button"
@@ -1503,11 +2017,31 @@ export default function CertificatePage() {
                   {/* Custom Border Builder Controls */}
                   {activeTemplate.theme.borderStyle === 'custom-builder' && (
                     <div className="p-3.5 bg-surface-950 rounded-xl border border-surface-800 space-y-3">
-                      <span className="text-xs font-bold text-amber-400 block">Custom Border Settings</span>
+                      <span className="text-xs font-bold text-amber-400 block">Custom Border Builder</span>
                       <div>
-                        <span className="text-[10px] text-surface-400 block mb-1">
-                          Border Thickness ({activeTemplate.theme.customBorderWidth || 4}px)
-                        </span>
+                        <div className="flex justify-between text-[10px] text-surface-400 mb-1">
+                          <span>Frame Margin Inset</span>
+                          <span className="font-mono text-amber-400">{activeTemplate.theme.customBorderInset || 20}px</span>
+                        </div>
+                        <input
+                          type="range"
+                          min={8}
+                          max={60}
+                          value={activeTemplate.theme.customBorderInset || 20}
+                          onChange={(e) =>
+                            setActiveTemplate((p) => ({
+                              ...p,
+                              theme: { ...p.theme, customBorderInset: parseInt(e.target.value) },
+                            }))
+                          }
+                          className="w-full accent-amber-500"
+                        />
+                      </div>
+                      <div>
+                        <div className="flex justify-between text-[10px] text-surface-400 mb-1">
+                          <span>Outer Rule Thickness</span>
+                          <span className="font-mono text-amber-400">{activeTemplate.theme.customBorderWidth || 4}px</span>
+                        </div>
                         <input
                           type="range"
                           min={1}
@@ -1523,27 +2057,23 @@ export default function CertificatePage() {
                         />
                       </div>
                       <div>
-                        <span className="text-[10px] text-surface-400 block mb-1">Corner Style</span>
-                        <div className="grid grid-cols-3 gap-1.5">
-                          {(['rosette', 'star', 'none'] as const).map((st) => (
-                            <button
-                              key={st}
-                              onClick={() =>
-                                setActiveTemplate((p) => ({
-                                  ...p,
-                                  theme: { ...p.theme, customCornerStyle: st },
-                                }))
-                              }
-                              className={`py-1 rounded text-[10px] font-bold capitalize border ${
-                                activeTemplate.theme.customCornerStyle === st
-                                  ? 'border-amber-500 bg-amber-500/20 text-amber-300'
-                                  : 'border-surface-800 bg-surface-900 text-surface-400'
-                              }`}
-                            >
-                              {st}
-                            </button>
-                          ))}
+                        <div className="flex justify-between text-[10px] text-surface-400 mb-1">
+                          <span>Inner Accent Rule</span>
+                          <span className="font-mono text-amber-400">{activeTemplate.theme.customInnerBorderWidth ?? 2}px</span>
                         </div>
+                        <input
+                          type="range"
+                          min={0}
+                          max={8}
+                          value={activeTemplate.theme.customInnerBorderWidth ?? 2}
+                          onChange={(e) =>
+                            setActiveTemplate((p) => ({
+                              ...p,
+                              theme: { ...p.theme, customInnerBorderWidth: parseInt(e.target.value) },
+                            }))
+                          }
+                          className="w-full accent-amber-500"
+                        />
                       </div>
                     </div>
                   )}
@@ -1555,21 +2085,23 @@ export default function CertificatePage() {
                     </label>
                     <div className="grid grid-cols-2 gap-2">
                       <button
+                        type="button"
                         onClick={() => setActiveTemplate((p) => ({ ...p, orientation: 'landscape' }))}
                         className={`py-2 px-3 rounded-lg border text-xs font-bold flex items-center justify-center gap-2 ${
                           activeTemplate.orientation === 'landscape'
                             ? 'border-amber-500 bg-amber-500/10 text-amber-400'
-                            : 'border-surface-800 text-surface-400'
+                            : 'border-surface-800 text-surface-400 hover:text-white'
                         }`}
                       >
                         <span>Landscape (Horizontal)</span>
                       </button>
                       <button
+                        type="button"
                         onClick={() => setActiveTemplate((p) => ({ ...p, orientation: 'portrait' }))}
                         className={`py-2 px-3 rounded-lg border text-xs font-bold flex items-center justify-center gap-2 ${
                           activeTemplate.orientation === 'portrait'
                             ? 'border-amber-500 bg-amber-500/10 text-amber-400'
-                            : 'border-surface-800 text-surface-400'
+                            : 'border-surface-800 text-surface-400 hover:text-white'
                         }`}
                       >
                         <span>Portrait (Vertical)</span>
@@ -2019,60 +2551,9 @@ export default function CertificatePage() {
             </div>
           </aside>
 
-          {/* Right Visual Certificate Canvas Viewport */}
-          <main className="flex-1 bg-black/60 flex flex-col min-w-0">
-            {/* Top Canvas Toolbar */}
-            <div className="h-14 px-6 border-b border-surface-800 flex items-center justify-between bg-surface-900/80 backdrop-blur-md shrink-0">
-              <div className="flex items-center gap-2 text-xs">
-                <span className="font-bold text-white truncate max-w-xs">{activeTemplate.title}</span>
-                <span className="text-surface-500">·</span>
-                <span className="text-surface-400 capitalize">{activeTemplate.orientation}</span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setShowPublishModal(true)}
-                  className="btn-secondary text-xs px-3 py-1.5 flex items-center gap-1.5 shadow-sm"
-                  title="Publish to Community Marketplace or Save"
-                >
-                  <Share2 className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Publish / Save Template</span>
-                </button>
-
-                {/* Direct High-Res PNG Download */}
-                <button
-                  onClick={handleDownloadPNG}
-                  disabled={isExporting}
-                  className="btn-primary text-xs px-3.5 py-1.5 flex items-center gap-1.5 shadow-md shadow-primary-500/20"
-                  title="Download High-Res 2x PNG Image"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>{isExporting ? 'Downloading...' : 'Download Image (PNG)'}</span>
-                </button>
-
-                {/* Direct Vector PDF Download */}
-                <button
-                  onClick={handleDownloadPDF}
-                  disabled={isExporting}
-                  className="btn-secondary text-xs px-3 py-1.5 flex items-center gap-1.5 border border-surface-700"
-                  title="Download Vector Print-Ready PDF"
-                >
-                  <FileText className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Download PDF</span>
-                </button>
-
-                <button
-                  onClick={() => window.print()}
-                  className="btn-icon p-1.5 text-surface-400 hover:text-white"
-                  title="Print Certificate"
-                >
-                  <Printer className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-
-            {/* Certificate Display Area */}
-            <div className="flex-1 overflow-auto p-4 sm:p-10 flex items-center justify-center">
+          {/* Right Visual Certificate Canvas Viewport (Independently scrollable) */}
+          <main className="flex-1 bg-surface-950 flex flex-col h-full overflow-y-auto overflow-x-hidden min-w-0 min-h-0 p-4 sm:p-8">
+            <div className="m-auto flex items-center justify-center">
               <div
                 ref={certificateRef}
                 className={`relative transition-all duration-300 shadow-2xl overflow-hidden m-auto select-none ${
