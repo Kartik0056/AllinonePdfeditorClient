@@ -1529,20 +1529,37 @@ export default function CertificatePage() {
   const [containerSize, setContainerSize] = useState<{ width: number; height: number }>({ width: 900, height: 650 });
   const [zoomMode, setZoomMode] = useState<'fit' | 'custom'>('fit');
   const [customZoom, setCustomZoom] = useState<number>(100);
+  const [mobileViewMode, setMobileViewMode] = useState<'split' | 'canvas' | 'tools'>('split');
 
   // Resize listener for main container to compute auto-fit
   useEffect(() => {
     const updateSize = () => {
       if (mainContainerRef.current) {
         const rect = mainContainerRef.current.getBoundingClientRect();
-        setContainerSize({ width: rect.width, height: rect.height });
+        if (rect.width > 0 && rect.height > 0) {
+          setContainerSize({ width: rect.width, height: rect.height });
+        } else {
+          setContainerSize({
+            width: typeof window !== 'undefined' ? window.innerWidth : 400,
+            height: typeof window !== 'undefined' ? (window.innerWidth < 1024 ? 320 : window.innerHeight - 150) : 500,
+          });
+        }
+      } else {
+        setContainerSize({
+          width: typeof window !== 'undefined' ? window.innerWidth : 400,
+          height: typeof window !== 'undefined' ? (window.innerWidth < 1024 ? 320 : window.innerHeight - 150) : 500,
+        });
       }
     };
 
     updateSize();
+    const rafId = requestAnimationFrame(updateSize);
     window.addEventListener('resize', updateSize);
-    return () => window.removeEventListener('resize', updateSize);
-  }, [sidebarWidth, activeTab]);
+    return () => {
+      cancelAnimationFrame(rafId);
+      window.removeEventListener('resize', updateSize);
+    };
+  }, [sidebarWidth, activeTab, mobileViewMode]);
 
   // Sidebar drag resizer mouse/touch listeners
   const startSidebarResize = (e: React.MouseEvent | React.TouchEvent) => {
@@ -1556,6 +1573,7 @@ export default function CertificatePage() {
   useEffect(() => {
     const handleMove = (e: MouseEvent | TouchEvent) => {
       if (!isResizingSidebarRef.current) return;
+      if (typeof window !== 'undefined' && window.innerWidth < 1024) return;
       const clientX = 'touches' in e && e.touches.length > 0 ? e.touches[0].clientX : (e as MouseEvent).clientX;
       const newWidth = Math.max(280, Math.min(650, Math.min(clientX, window.innerWidth - 320)));
       setSidebarWidth(newWidth);
@@ -1722,36 +1740,43 @@ export default function CertificatePage() {
   const baseWidth = isLandscape ? 850 : 600;
   const baseHeight = isLandscape ? 600 : 850;
 
-  const paddingX = 48;
-  const paddingY = 96; // accounts for bottom zoom bar & breathing room
-  const availW = Math.max(200, containerSize.width - paddingX);
-  const availH = Math.max(200, containerSize.height - paddingY);
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 1024;
+  const paddingX = isMobile ? 16 : 48;
+  const paddingY = isMobile ? (mobileViewMode === 'split' ? 20 : 64) : 96;
+
+  const measuredW = containerSize.width > 0 ? containerSize.width : (typeof window !== 'undefined' ? window.innerWidth : 850);
+  const measuredH = containerSize.height > 0 ? containerSize.height : (typeof window !== 'undefined' ? window.innerHeight - 150 : 600);
+
+  const availW = Math.max(160, measuredW - paddingX);
+  const availH = isMobile && mobileViewMode === 'split'
+    ? (isLandscape ? Math.min(320, (availW / baseWidth) * baseHeight) : 360)
+    : Math.max(160, measuredH - paddingY);
 
   const autoFitScale = Math.min(availW / baseWidth, availH / baseHeight, 1.0);
-  const currentScale = zoomMode === 'fit' ? Math.max(0.25, autoFitScale) : Math.max(0.25, customZoom / 100);
+  const currentScale = zoomMode === 'fit' ? Math.max(0.18, autoFitScale) : Math.max(0.18, customZoom / 100);
   const displayZoomPercent = Math.round(currentScale * 100);
 
   return (
-    <div className="h-screen max-h-screen overflow-hidden bg-surface-950 text-surface-100 flex flex-col">
+    <div className="min-h-screen lg:h-screen lg:max-h-screen lg:overflow-hidden bg-surface-950 text-surface-100 flex flex-col">
       <Navbar />
 
       {/* Unified Pro Studio Header */}
-      <header className="h-14 bg-surface-900 border-b border-surface-800 px-4 sm:px-6 flex items-center justify-between shrink-0 z-30">
+      <header className="h-14 bg-surface-900 border-b border-surface-800 px-3 sm:px-6 flex items-center justify-between shrink-0 z-30 overflow-x-auto no-scrollbar">
         {/* Left: Studio Branding, Document Title & Orientation */}
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-amber-500 to-yellow-600 flex items-center justify-center shadow-md shadow-amber-500/20 shrink-0">
-            <Award className="w-4 h-4 text-black font-black" />
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-gradient-to-br from-amber-500 to-yellow-600 flex items-center justify-center shadow-md shadow-amber-500/20 shrink-0">
+            <Award className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-black font-black" />
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs sm:text-sm font-black text-white tracking-tight hidden sm:inline">
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <span className="text-xs sm:text-sm font-black text-white tracking-tight hidden lg:inline">
               Certificate <span className="text-amber-400">Studio</span>
             </span>
-            <span className="text-surface-600 hidden sm:inline">•</span>
+            <span className="text-surface-600 hidden lg:inline">•</span>
             <input
               type="text"
               value={activeTemplate.title}
               onChange={(e) => setActiveTemplate((p) => ({ ...p, title: e.target.value }))}
-              className="text-xs font-semibold text-white bg-surface-950/80 border border-surface-700/80 rounded-lg px-2.5 py-1 max-w-[140px] sm:max-w-[200px] truncate focus:outline-none focus:border-amber-500"
+              className="text-xs font-semibold text-white bg-surface-950/80 border border-surface-700/80 rounded-lg px-2 py-1 max-w-[90px] sm:max-w-[160px] truncate focus:outline-none focus:border-amber-500"
               title="Click to rename certificate"
             />
             <button
@@ -1761,55 +1786,59 @@ export default function CertificatePage() {
                   orientation: p.orientation === 'landscape' ? 'portrait' : 'landscape',
                 }))
               }
-              className="px-2 py-1 rounded-lg text-[10px] font-bold bg-surface-800 hover:bg-surface-700 text-surface-300 border border-surface-700 uppercase transition-colors"
+              className="px-1.5 sm:px-2 py-1 rounded-lg text-[9px] sm:text-[10px] font-bold bg-surface-800 hover:bg-surface-700 text-surface-300 border border-surface-700 uppercase transition-colors shrink-0"
               title="Toggle Landscape / Portrait"
             >
-              {activeTemplate.orientation}
+              <span className="sm:hidden">{activeTemplate.orientation === 'landscape' ? 'Land' : 'Port'}</span>
+              <span className="hidden sm:inline">{activeTemplate.orientation}</span>
             </button>
           </div>
         </div>
 
         {/* Center: Main View Navigation */}
-        <div className="flex items-center gap-1 bg-surface-950 p-1 rounded-xl border border-surface-800">
+        <div className="flex items-center gap-1 bg-surface-950 p-1 rounded-xl border border-surface-800 shrink-0">
           <button
             onClick={() => setActiveTab('studio')}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+            className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
               activeTab === 'studio'
                 ? 'bg-amber-500 text-black font-bold shadow-xs'
                 : 'text-surface-400 hover:text-white'
             }`}
+            title="Studio Editor"
           >
             <PenTool className="w-3.5 h-3.5" />
-            <span className="hidden md:inline">Studio Editor</span>
+            <span className="hidden sm:inline">Editor</span>
           </button>
 
           <button
             onClick={() => setActiveTab('marketplace')}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+            className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
               activeTab === 'marketplace'
                 ? 'bg-amber-500 text-black font-bold shadow-xs'
                 : 'text-surface-400 hover:text-white'
             }`}
+            title="Templates Marketplace"
           >
             <Award className="w-3.5 h-3.5" />
-            <span className="hidden md:inline">Marketplace</span>
+            <span className="hidden sm:inline">Market</span>
           </button>
 
           <button
             onClick={() => setActiveTab('my-templates')}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+            className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
               activeTab === 'my-templates'
                 ? 'bg-amber-500 text-black font-bold shadow-xs'
                 : 'text-surface-400 hover:text-white'
             }`}
+            title="My Saved Templates"
           >
             <Layers className="w-3.5 h-3.5" />
-            <span className="hidden md:inline">My Templates ({userTemplates.length})</span>
+            <span className="hidden sm:inline">Templates ({userTemplates.length})</span>
           </button>
         </div>
 
         {/* Right: Actions */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           <button
             onClick={handleStartFromScratch}
             className="hidden xl:flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-surface-300 hover:text-white hover:bg-surface-800 transition-colors"
@@ -1823,17 +1852,17 @@ export default function CertificatePage() {
             <>
               <button
                 onClick={() => setShowPublishModal(true)}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-amber-300 hover:bg-amber-500/10 border border-amber-500/30 transition-colors"
+                className="flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-lg text-xs font-semibold text-amber-300 hover:bg-amber-500/10 border border-amber-500/30 transition-colors"
                 title="Publish / Save Template"
               >
                 <Share2 className="w-3.5 h-3.5 text-amber-400" />
-                <span className="hidden sm:inline">Save</span>
+                <span className="hidden md:inline">Save</span>
               </button>
 
               <button
                 onClick={handleDownloadPNG}
                 disabled={isExporting}
-                className="btn-primary text-xs px-3 py-1.5 flex items-center gap-1.5 shadow-md shadow-primary-500/20"
+                className="btn-primary text-xs px-2.5 sm:px-3 py-1.5 flex items-center gap-1 shadow-md shadow-primary-500/20"
                 title="Download High-Res 2x PNG Image"
               >
                 <Download className="w-3.5 h-3.5" />
@@ -1843,7 +1872,7 @@ export default function CertificatePage() {
               <button
                 onClick={handleDownloadPDF}
                 disabled={isExporting}
-                className="btn-secondary text-xs px-3 py-1.5 flex items-center gap-1.5 border border-surface-700 hover:border-emerald-500 text-white"
+                className="btn-secondary text-xs px-2.5 sm:px-3 py-1.5 flex items-center gap-1 border border-surface-700 hover:border-emerald-500 text-white"
                 title="Download Vector PDF"
               >
                 <FileText className="w-3.5 h-3.5 text-emerald-400" />
@@ -1862,13 +1891,62 @@ export default function CertificatePage() {
         </div>
       )}
 
+      {/* Mobile View Mode Switcher (Visible on < lg screens) */}
+      {activeTab === 'studio' && (
+        <div className="lg:hidden flex items-center justify-between px-3 py-2 bg-surface-900/95 border-b border-surface-800 shrink-0 z-20 backdrop-blur-md">
+          <div className="flex items-center bg-surface-950 p-1 rounded-xl border border-surface-800 w-full justify-between gap-1">
+            <button
+              onClick={() => setMobileViewMode('canvas')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all ${
+                mobileViewMode === 'canvas'
+                  ? 'bg-amber-500 text-black font-bold shadow-xs'
+                  : 'text-surface-400 hover:text-white'
+              }`}
+            >
+              <Eye className="w-3.5 h-3.5" />
+              <span>Canvas</span>
+            </button>
+            <button
+              onClick={() => setMobileViewMode('tools')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all ${
+                mobileViewMode === 'tools'
+                  ? 'bg-amber-500 text-black font-bold shadow-xs'
+                  : 'text-surface-400 hover:text-white'
+              }`}
+            >
+              <Sliders className="w-3.5 h-3.5" />
+              <span>Tools</span>
+            </button>
+            <button
+              onClick={() => setMobileViewMode('split')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all ${
+                mobileViewMode === 'split'
+                  ? 'bg-amber-500 text-black font-bold shadow-xs'
+                  : 'text-surface-400 hover:text-white'
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>Split (Both)</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ─── TAB 1: STUDIO EDITOR ────────────────────────────────────────── */}
       {activeTab === 'studio' && (
-        <div className="flex-1 flex flex-col lg:flex-row overflow-hidden min-h-0">
+        <div
+          className={`flex-1 flex flex-col lg:flex-row min-h-0 ${
+            mobileViewMode === 'split' ? 'overflow-y-auto' : 'overflow-hidden'
+          } lg:overflow-hidden`}
+        >
           {/* Left Control Panel (Independently scrollable & Resizable) */}
           <aside
             style={{ width: typeof window !== 'undefined' && window.innerWidth >= 1024 ? `${sidebarWidth}px` : undefined }}
-            className="w-full lg:w-auto bg-surface-900 border-b lg:border-b-0 border-surface-800 flex flex-col shrink-0 h-full overflow-y-auto min-h-0"
+            className={`${
+              mobileViewMode === 'canvas' ? 'hidden lg:flex' : 'flex'
+            } w-full lg:w-auto bg-surface-900 border-b lg:border-b-0 border-surface-800 flex-col shrink-0 ${
+              mobileViewMode === 'split' ? 'h-auto overflow-visible' : 'h-full overflow-y-auto'
+            } lg:h-full lg:overflow-y-auto min-h-0 touch-pan-y`}
           >
             {/* Studio Tools Navigation */}
             <div className="grid grid-cols-5 p-2 bg-surface-950/90 border-b border-surface-800 text-[11px] font-semibold sticky top-0 z-20 backdrop-blur-md">
@@ -2639,6 +2717,18 @@ export default function CertificatePage() {
                   </div>
                 </div>
               )}
+            {/* Mobile quick view button when editing in Tools mode */}
+            {mobileViewMode === 'tools' && (
+              <div className="lg:hidden sticky bottom-4 mx-auto z-30 pb-2 flex justify-center">
+                <button
+                  onClick={() => setMobileViewMode('canvas')}
+                  className="bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs px-5 py-2.5 rounded-full shadow-2xl flex items-center gap-2 border border-amber-400/50 active:scale-95 transition-transform backdrop-blur-md"
+                >
+                  <Eye className="w-4 h-4" />
+                  <span>View Certificate Preview</span>
+                </button>
+              </div>
+            )}
             </div>
           </aside>
 
@@ -2657,9 +2747,13 @@ export default function CertificatePage() {
           {/* Right Visual Certificate Canvas Viewport (Independently scrollable & Auto-fitting) */}
           <main
             ref={mainContainerRef}
-            className="flex-1 bg-surface-950 flex flex-col h-full overflow-auto min-w-0 min-h-0 p-4 sm:p-6 relative"
+            className={`${
+              mobileViewMode === 'tools' ? 'hidden lg:flex' : 'flex'
+            } flex-1 bg-surface-950 flex-col ${
+              mobileViewMode === 'split' ? 'min-h-[280px] h-auto shrink-0 border-b border-surface-800' : 'h-full'
+            } lg:h-full overflow-auto min-w-0 min-h-0 p-2 sm:p-4 lg:p-6 relative touch-pan-x touch-pan-y`}
           >
-            <div className="m-auto flex items-center justify-center py-4">
+            <div className="m-auto flex items-center justify-center py-2 sm:py-4">
               {/* Scaled Certificate Wrapper */}
               <div
                 style={{
@@ -2853,11 +2947,16 @@ export default function CertificatePage() {
           </div>
 
             {/* Bottom Floating Canvas Zoom & Fit Toolbar */}
-            <div className="sticky bottom-3 mt-auto mx-auto z-30 flex items-center gap-2 bg-surface-900/95 backdrop-blur-md border border-surface-700/80 px-3.5 py-1.5 rounded-full shadow-2xl text-xs text-white">
+            {/* Floating Zoom & Fit Control Toolbar */}
+            <div
+              className={`sticky bottom-3 mt-auto mx-auto z-30 items-center gap-1.5 sm:gap-2 bg-surface-900/95 backdrop-blur-md border border-surface-700/80 px-2.5 sm:px-3.5 py-1.5 rounded-full shadow-2xl text-xs text-white ${
+                mobileViewMode === 'split' ? 'hidden sm:flex' : 'flex'
+              }`}
+            >
               <button
                 onClick={() => {
                   setZoomMode('custom');
-                  setCustomZoom(Math.max(30, Math.round(currentScale * 100) - 10));
+                  setCustomZoom(Math.max(20, Math.round(currentScale * 100) - 10));
                 }}
                 className="p-1 hover:text-amber-400 rounded-full hover:bg-surface-800 transition-colors"
                 title="Zoom Out (-)"
@@ -2915,6 +3014,20 @@ export default function CertificatePage() {
                 {isLandscape ? 'Landscape 850×600' : 'Portrait 600×850'}
               </span>
             </div>
+
+            {/* On Mobile: Quick Button to Switch to Tools when in Canvas mode */}
+            {mobileViewMode === 'canvas' && (
+              <div className="lg:hidden absolute bottom-3 right-3 z-40">
+                <button
+                  onClick={() => setMobileViewMode('tools')}
+                  className="bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs px-3.5 py-2 rounded-full shadow-xl flex items-center gap-1.5 active:scale-95 transition-transform"
+                  title="Open Studio Tools"
+                >
+                  <Sliders className="w-3.5 h-3.5" />
+                  <span>Tools</span>
+                </button>
+              </div>
+            )}
           </main>
         </div>
       )}
