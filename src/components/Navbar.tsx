@@ -19,11 +19,13 @@ import {
   Sparkles,
   Film,
   Camera,
+  Award,
 } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
 
 export const navItems = [
   { path: '/editor', label: 'PDF Editor', icon: FileText, desc: 'Edit text & PDFs' },
+  { path: '/certificate', label: 'Certificate', icon: Award, desc: 'Design & templates' },
   { path: '/passport-photo', label: 'Passport Photo', icon: Camera, desc: 'Passport size & A4 print' },
   { path: '/merge', label: 'Merge', icon: Merge, desc: 'Combine PDFs' },
   { path: '/split', label: 'Split', icon: Scissors, desc: 'Split & extract' },

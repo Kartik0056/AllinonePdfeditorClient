@@ -7,13 +7,14 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   FileText, Merge, Scissors, Image, Shrink, Shield,
   PenTool, Type, Stamp, Search, Upload, ArrowRight,
-  Sparkles, Zap, Lock, ChevronRight, Film
+  Sparkles, Zap, Lock, ChevronRight, Film, Award
 } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import SpaceBackground from '../components/SpaceBackground';
 
 const features = [
   { icon: FileText, title: 'PDF Editor', desc: 'Edit text, images, and content in any PDF', link: '/editor', color: 'from-blue-500 to-indigo-600' },
+  { icon: Award, title: 'Certificate Studio', desc: 'Design luxury awards, diplomas & community templates', link: '/certificate', color: 'from-amber-500 to-yellow-600' },
   { icon: Image, title: 'Image Studio Pro', desc: 'Photoshop-grade photo editing, filters & LUTs', link: '/image-editor', color: 'from-fuchsia-500 to-purple-600' },
   { icon: Film, title: 'Video Studio Pro', desc: 'Premiere-style timeline, scissors cut & sound edit', link: '/video-editor', color: 'from-orange-500 to-rose-600' },
   { icon: Sparkles, title: 'BG Remover & PDF to JPG', desc: 'Instant transparent PNG & high-res PDF to Image', link: '/convert', color: 'from-emerald-500 to-teal-600' },

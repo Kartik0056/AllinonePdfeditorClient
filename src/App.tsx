@@ -5,7 +5,7 @@
 import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import ErrorBoundary from './components/ErrorBoundary';
-import BubbleCursor from './components/BubbleCursor';
+import WaterRippleCursor from './components/WaterRippleCursor';
 
 // Lazy-loaded pages
 const LandingPage = lazy(() => import('./pages/LandingPage'));
@@ -17,6 +17,7 @@ const CompressPage = lazy(() => import('./pages/CompressPage'));
 const ImageEditorPage = lazy(() => import('./pages/ImageEditorPage'));
 const VideoEditorPage = lazy(() => import('./pages/VideoEditorPage'));
 const PassportPhotoPage = lazy(() => import('./pages/PassportPhotoPage'));
+const CertificatePage = lazy(() => import('./pages/CertificatePage'));
 const AuthPage = lazy(() => import('./pages/AuthPage'));
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 
@@ -35,11 +36,12 @@ export default function App() {
   return (
     <ErrorBoundary>
       <BrowserRouter>
-        <BubbleCursor />
+        <WaterRippleCursor />
         <Suspense fallback={<LoadingFallback />}>
           <Routes>
             <Route path="/" element={<LandingPage />} />
             <Route path="/editor" element={<EditorPage />} />
+            <Route path="/certificate" element={<CertificatePage />} />
             <Route path="/merge" element={<MergePage />} />
             <Route path="/split" element={<SplitPage />} />
             <Route path="/convert" element={<ConvertPage />} />
