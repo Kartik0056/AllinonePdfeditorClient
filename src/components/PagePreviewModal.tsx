@@ -114,13 +114,13 @@ export default function PagePreviewModal({
 
       {/* Main Preview Container */}
       <div
-        className="flex-1 overflow-auto flex items-center justify-center p-8 cursor-zoom-out"
+        className="flex-1 overflow-auto flex p-4 sm:p-8 cursor-zoom-out bg-surface-950/80 relative"
         onClick={(e) => {
           if (e.target === e.currentTarget) onClose();
         }}
       >
         <div
-          className="relative transition-transform duration-150 shadow-2xl rounded-lg bg-white overflow-hidden"
+          className="m-auto relative transition-transform duration-150 shadow-2xl rounded-lg bg-white overflow-hidden shrink-0"
           style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'center center' }}
           onClick={(e) => e.stopPropagation()}
         >
