@@ -15,7 +15,7 @@ import {
   Printer, Layers, Palette, FileText, CheckCircle2, ShieldCheck,
   Medal, Star, RefreshCw, Sliders, ExternalLink, Lock, DollarSign,
   Upload, Trash2, ChevronRight, PenTool, Layout, ArrowLeft,
-  QrCode, Stamp, Shield, Image as ImageIcon, X, ZoomIn
+  QrCode, Stamp, Shield, Image as ImageIcon, X, ZoomIn, ZoomOut
 } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
@@ -1512,6 +1512,80 @@ export default function CertificatePage() {
   const badgeInputRef = useRef<HTMLInputElement>(null);
   const borderInputRef = useRef<HTMLInputElement>(null);
 
+  // Resizable Sidebar Controls State
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('pdfstudio_cert_sidebar_w');
+      return saved ? Math.max(280, Math.min(650, parseInt(saved, 10))) : 400;
+    } catch {
+      return 400;
+    }
+  });
+  const [isResizingSidebar, setIsResizingSidebar] = useState(false);
+  const isResizingSidebarRef = useRef(false);
+
+  // Auto-fit & Zoom State for Certificate Stage
+  const mainContainerRef = useRef<HTMLDivElement>(null);
+  const [containerSize, setContainerSize] = useState<{ width: number; height: number }>({ width: 900, height: 650 });
+  const [zoomMode, setZoomMode] = useState<'fit' | 'custom'>('fit');
+  const [customZoom, setCustomZoom] = useState<number>(100);
+
+  // Resize listener for main container to compute auto-fit
+  useEffect(() => {
+    const updateSize = () => {
+      if (mainContainerRef.current) {
+        const rect = mainContainerRef.current.getBoundingClientRect();
+        setContainerSize({ width: rect.width, height: rect.height });
+      }
+    };
+
+    updateSize();
+    window.addEventListener('resize', updateSize);
+    return () => window.removeEventListener('resize', updateSize);
+  }, [sidebarWidth, activeTab]);
+
+  // Sidebar drag resizer mouse/touch listeners
+  const startSidebarResize = (e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
+    isResizingSidebarRef.current = true;
+    setIsResizingSidebar(true);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  };
+
+  useEffect(() => {
+    const handleMove = (e: MouseEvent | TouchEvent) => {
+      if (!isResizingSidebarRef.current) return;
+      const clientX = 'touches' in e && e.touches.length > 0 ? e.touches[0].clientX : (e as MouseEvent).clientX;
+      const newWidth = Math.max(280, Math.min(650, Math.min(clientX, window.innerWidth - 320)));
+      setSidebarWidth(newWidth);
+      try {
+        localStorage.setItem('pdfstudio_cert_sidebar_w', String(newWidth));
+      } catch {}
+    };
+
+    const handleUp = () => {
+      if (isResizingSidebarRef.current) {
+        isResizingSidebarRef.current = false;
+        setIsResizingSidebar(false);
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      }
+    };
+
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+    window.addEventListener('touchmove', handleMove);
+    window.addEventListener('touchend', handleUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
+      window.removeEventListener('touchmove', handleMove);
+      window.removeEventListener('touchend', handleUp);
+    };
+  }, []);
+
   // Load user saved templates from localStorage
   useEffect(() => {
     try {
@@ -1642,6 +1716,20 @@ export default function CertificatePage() {
   const isDarkMode = activeTemplate.theme.paperTint === '#0F1117';
   const textColor = isDarkMode ? '#FFFFFF' : '#1E293B';
   const subtextColor = isDarkMode ? '#94A3B8' : '#64748B';
+
+  // Dynamic Scale & Size calculation for responsive certificate auto-fitting
+  const isLandscape = activeTemplate.orientation === 'landscape';
+  const baseWidth = isLandscape ? 850 : 600;
+  const baseHeight = isLandscape ? 600 : 850;
+
+  const paddingX = 48;
+  const paddingY = 96; // accounts for bottom zoom bar & breathing room
+  const availW = Math.max(200, containerSize.width - paddingX);
+  const availH = Math.max(200, containerSize.height - paddingY);
+
+  const autoFitScale = Math.min(availW / baseWidth, availH / baseHeight, 1.0);
+  const currentScale = zoomMode === 'fit' ? Math.max(0.25, autoFitScale) : Math.max(0.25, customZoom / 100);
+  const displayZoomPercent = Math.round(currentScale * 100);
 
   return (
     <div className="h-screen max-h-screen overflow-hidden bg-surface-950 text-surface-100 flex flex-col">
@@ -1777,8 +1865,11 @@ export default function CertificatePage() {
       {/* ─── TAB 1: STUDIO EDITOR ────────────────────────────────────────── */}
       {activeTab === 'studio' && (
         <div className="flex-1 flex flex-col lg:flex-row overflow-hidden min-h-0">
-          {/* Left Control Panel (Independently scrollable) */}
-          <aside className="w-full lg:w-[420px] bg-surface-900 border-b lg:border-b-0 lg:border-r border-surface-800 flex flex-col shrink-0 h-full overflow-y-auto min-h-0">
+          {/* Left Control Panel (Independently scrollable & Resizable) */}
+          <aside
+            style={{ width: typeof window !== 'undefined' && window.innerWidth >= 1024 ? `${sidebarWidth}px` : undefined }}
+            className="w-full lg:w-auto bg-surface-900 border-b lg:border-b-0 border-surface-800 flex flex-col shrink-0 h-full overflow-y-auto min-h-0"
+          >
             {/* Studio Tools Navigation */}
             <div className="grid grid-cols-5 p-2 bg-surface-950/90 border-b border-surface-800 text-[11px] font-semibold sticky top-0 z-20 backdrop-blur-md">
               {[
@@ -2551,21 +2642,45 @@ export default function CertificatePage() {
             </div>
           </aside>
 
-          {/* Right Visual Certificate Canvas Viewport (Independently scrollable) */}
-          <main className="flex-1 bg-surface-950 flex flex-col h-full overflow-y-auto overflow-x-hidden min-w-0 min-h-0 p-4 sm:p-8">
-            <div className="m-auto flex items-center justify-center">
+          {/* Draggable Vertical Divider for Sidebar Width Resizing */}
+          <div
+            onMouseDown={startSidebarResize}
+            onTouchStart={startSidebarResize}
+            className={`hidden lg:flex w-2.5 hover:w-2.5 bg-surface-900 border-r border-surface-800 hover:bg-amber-500 active:bg-amber-500 cursor-col-resize transition-all items-center justify-center shrink-0 group z-30 select-none ${
+              isResizingSidebar ? 'bg-amber-500 !border-amber-400 shadow-lg shadow-amber-500/30' : ''
+            }`}
+            title="Drag left/right to resize sidebar width"
+          >
+            <div className="w-0.5 h-8 bg-surface-600 rounded-full group-hover:bg-black group-hover:scale-y-125 transition-all" />
+          </div>
+
+          {/* Right Visual Certificate Canvas Viewport (Independently scrollable & Auto-fitting) */}
+          <main
+            ref={mainContainerRef}
+            className="flex-1 bg-surface-950 flex flex-col h-full overflow-auto min-w-0 min-h-0 p-4 sm:p-6 relative"
+          >
+            <div className="m-auto flex items-center justify-center py-4">
+              {/* Scaled Certificate Wrapper */}
               <div
-                ref={certificateRef}
-                className={`relative transition-all duration-300 shadow-2xl overflow-hidden m-auto select-none ${
-                  activeTemplate.orientation === 'landscape'
-                    ? 'w-[850px] h-[600px]'
-                    : 'w-[600px] h-[850px]'
-                }`}
                 style={{
-                  backgroundColor: activeTemplate.theme.paperTint,
-                  color: textColor,
+                  width: `${Math.round(baseWidth * currentScale)}px`,
+                  height: `${Math.round(baseHeight * currentScale)}px`,
+                  transition: isResizingSidebar ? 'none' : 'width 0.15s ease-out, height 0.15s ease-out',
                 }}
+                className="relative flex items-center justify-center shrink-0 select-none shadow-2xl"
               >
+                <div
+                  ref={certificateRef}
+                  className="relative shadow-2xl overflow-hidden select-none origin-top-left"
+                  style={{
+                    width: `${baseWidth}px`,
+                    height: `${baseHeight}px`,
+                    transform: `scale(${currentScale})`,
+                    transformOrigin: 'top left',
+                    backgroundColor: activeTemplate.theme.paperTint,
+                    color: textColor,
+                  }}
+                >
                 {/* ─── REAL ACCURATE BORDER RENDERER ─────────── */}
                 <CertificateBorderRenderer theme={activeTemplate.theme} />
 
@@ -2734,6 +2849,71 @@ export default function CertificatePage() {
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+
+            {/* Bottom Floating Canvas Zoom & Fit Toolbar */}
+            <div className="sticky bottom-3 mt-auto mx-auto z-30 flex items-center gap-2 bg-surface-900/95 backdrop-blur-md border border-surface-700/80 px-3.5 py-1.5 rounded-full shadow-2xl text-xs text-white">
+              <button
+                onClick={() => {
+                  setZoomMode('custom');
+                  setCustomZoom(Math.max(30, Math.round(currentScale * 100) - 10));
+                }}
+                className="p-1 hover:text-amber-400 rounded-full hover:bg-surface-800 transition-colors"
+                title="Zoom Out (-)"
+              >
+                <ZoomOut className="w-3.5 h-3.5" />
+              </button>
+
+              <span className="font-mono text-[11px] font-bold text-amber-300 w-11 text-center select-none">
+                {displayZoomPercent}%
+              </span>
+
+              <button
+                onClick={() => {
+                  setZoomMode('custom');
+                  setCustomZoom(Math.min(200, Math.round(currentScale * 100) + 10));
+                }}
+                className="p-1 hover:text-amber-400 rounded-full hover:bg-surface-800 transition-colors"
+                title="Zoom In (+)"
+              >
+                <ZoomIn className="w-3.5 h-3.5" />
+              </button>
+
+              <div className="w-px h-3.5 bg-surface-700 mx-1" />
+
+              <button
+                onClick={() => setZoomMode('fit')}
+                className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold transition-colors ${
+                  zoomMode === 'fit'
+                    ? 'bg-amber-500 text-black shadow-sm'
+                    : 'text-surface-300 hover:text-white hover:bg-surface-800'
+                }`}
+                title="Fit to Screen (Auto Adjusts to screen & sidebar size)"
+              >
+                Fit Screen
+              </button>
+
+              <button
+                onClick={() => {
+                  setZoomMode('custom');
+                  setCustomZoom(100);
+                }}
+                className={`px-2.5 py-0.5 rounded-full text-[11px] font-mono transition-colors ${
+                  zoomMode === 'custom' && Math.round(currentScale * 100) === 100
+                    ? 'bg-amber-500 text-black font-bold'
+                    : 'text-surface-400 hover:text-white hover:bg-surface-800'
+                }`}
+                title="Actual 100% Size"
+              >
+                100%
+              </button>
+
+              <div className="w-px h-3.5 bg-surface-700 mx-1" />
+
+              <span className="text-[10px] text-surface-400 font-medium select-none hidden sm:inline">
+                {isLandscape ? 'Landscape 850×600' : 'Portrait 600×850'}
+              </span>
             </div>
           </main>
         </div>
