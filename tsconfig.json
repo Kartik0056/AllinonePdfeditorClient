@@ -20,7 +20,8 @@
       "@pdfeditor/shared": ["./src/shared"],
       "@pdfeditor/sdk": ["./src/sdk"]
     },
-    "baseUrl": "."
+    "baseUrl": ".",
+    "types": ["node"]
   },
-  "include": ["src"]
+  "include": ["src", "vite.config.ts"]
 }

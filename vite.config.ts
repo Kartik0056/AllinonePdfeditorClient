@@ -1,14 +1,14 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import path from 'path';
+import { fileURLToPath, URL } from 'node:url';
 
 export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
-      '@pdfeditor/shared': path.resolve(__dirname, './src/shared/index.ts'),
-      '@pdfeditor/sdk': path.resolve(__dirname, './src/sdk/index.ts'),
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+      '@pdfeditor/shared': fileURLToPath(new URL('./src/shared/index.ts', import.meta.url)),
+      '@pdfeditor/sdk': fileURLToPath(new URL('./src/sdk/index.ts', import.meta.url)),
     },
   },
   server: {
