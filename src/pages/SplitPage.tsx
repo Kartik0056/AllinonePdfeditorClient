@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import PagePreviewModal from '../components/PagePreviewModal';
-import { pdfAPI } from '../services/api';
+import { pdfAPI, downloadFile } from '../services/api';
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
 
@@ -32,6 +32,7 @@ export default function SplitPage() {
   const [file, setFile] = useState<File | null>(null);
   const [tabMode, setTabMode] = useState<SplitTabMode>('pages');
   const [extractSubMode, setExtractSubMode] = useState<ExtractSubMode>('select');
+  const [isDownloading, setIsDownloading] = useState<boolean>(false);
 
   // Input states
   const [extractPagesInput, setExtractPagesInput] = useState<string>('1-2');
@@ -652,13 +653,40 @@ export default function SplitPage() {
                   <div className="flex items-center justify-center gap-2 text-emerald-400 text-sm font-semibold">
                     <CheckCircle2 className="w-5 h-5" /> Split Complete!
                   </div>
-                  <a
-                    href={result.path}
-                    download
-                    className="w-full py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 transition-all"
+                  <button
+                    onClick={async () => {
+                      if (!result.path) return;
+                      setIsDownloading(true);
+                      try {
+                        const fallbackName = result.type === 'zip'
+                          ? `${file?.name.replace(/\.[^/.]+$/, '') || 'split'}_extracted.zip`
+                          : `${file?.name.replace(/\.[^/.]+$/, '') || 'split'}_extracted.pdf`;
+                        await downloadFile(result.path, fallbackName);
+                      } catch (e: any) {
+                        setError(e.message || 'Download failed');
+                      } finally {
+                        setIsDownloading(false);
+                      }
+                    }}
+                    disabled={isDownloading}
+                    className="w-full py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 transition-all transform active:scale-95 disabled:opacity-50"
                   >
-                    <Download className="w-4 h-4" /> Download {result.type === 'zip' ? 'ZIP' : 'PDF'}
-                  </a>
+                    {isDownloading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" /> Downloading...
+                      </>
+                    ) : (
+                      <>
+                        <Download className="w-4 h-4" /> Download {result.type === 'zip' ? 'ZIP' : 'PDF'}
+                      </>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setResult(null)}
+                    className="w-full py-1.5 text-xs text-surface-400 hover:text-white transition-colors"
+                  >
+                    ← Configure or split again
+                  </button>
                 </div>
               )}
             </div>

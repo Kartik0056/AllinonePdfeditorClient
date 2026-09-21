@@ -9,7 +9,7 @@ import {
   ArrowRight, CheckCircle2, TrendingDown, Eye, Check
 } from 'lucide-react';
 import Navbar from '../components/Navbar';
-import { pdfAPI } from '../services/api';
+import { pdfAPI, downloadFile } from '../services/api';
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
 
@@ -23,6 +23,7 @@ export default function CompressPage() {
   const [thumbUrl, setThumbUrl] = useState<string | null>(null);
   const [pageCount, setPageCount] = useState<number>(1);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [isDownloading, setIsDownloading] = useState<boolean>(false);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -252,13 +253,38 @@ export default function CompressPage() {
                     <TrendingDown className="w-3.5 h-3.5 text-emerald-400 inline" />
                     <span className="text-emerald-400 font-bold">{formatSize(result.compressedSize)}</span>
                   </div>
-                  <a
-                    href={result.path}
-                    download="compressed_document.pdf"
-                    className="w-full py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 transition-all"
+                  <button
+                    onClick={async () => {
+                      if (!result.path) return;
+                      setIsDownloading(true);
+                      try {
+                        const fallbackName = `${file?.name.replace(/\.[^/.]+$/, '') || 'document'}_compressed.pdf`;
+                        await downloadFile(result.path, fallbackName);
+                      } catch (e: any) {
+                        setError(e.message || 'Download failed');
+                      } finally {
+                        setIsDownloading(false);
+                      }
+                    }}
+                    disabled={isDownloading}
+                    className="w-full py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 transition-all transform active:scale-95 disabled:opacity-50"
                   >
-                    <Download className="w-4 h-4" /> Download Compressed PDF
-                  </a>
+                    {isDownloading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" /> Downloading...
+                      </>
+                    ) : (
+                      <>
+                        <Download className="w-4 h-4" /> Download Compressed PDF
+                      </>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setResult(null)}
+                    className="w-full py-1.5 text-xs text-surface-400 hover:text-white transition-colors"
+                  >
+                    ← Compress another PDF
+                  </button>
                 </div>
               )}
             </div>

@@ -34,6 +34,75 @@ api.interceptors.response.use(
 
 export default api;
 
+/**
+ * Get absolute file URL from a relative or absolute backend path
+ */
+export const getFileUrl = (filePath: string): string => {
+  if (!filePath) return '';
+  if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
+    return filePath;
+  }
+  const cleanPath = filePath.startsWith('/') ? filePath : `/${filePath}`;
+  return `${API_BASE_URL}${cleanPath}`;
+};
+
+/**
+ * Download a file cleanly using a local Blob URL or backend fallback
+ * Ensures cross-origin downloads work and custom filename is preserved
+ */
+export const downloadFile = async (filePath: string, customFilename?: string): Promise<void> => {
+  if (!filePath) return;
+  const fullUrl = getFileUrl(filePath);
+
+  let fileName = (customFilename || '').trim();
+  if (!fileName) {
+    fileName = filePath.split('/').pop() || 'downloaded_document.pdf';
+  }
+
+  // Ensure PDF extension if appropriate
+  const isPdf = filePath.toLowerCase().includes('.pdf') || fullUrl.toLowerCase().includes('.pdf');
+  const isZip = filePath.toLowerCase().includes('.zip') || fullUrl.toLowerCase().includes('.zip');
+  if (isPdf && !fileName.toLowerCase().endsWith('.pdf')) {
+    fileName = `${fileName}.pdf`;
+  } else if (isZip && !fileName.toLowerCase().endsWith('.zip')) {
+    fileName = `${fileName}.zip`;
+  }
+
+  try {
+    const res = await fetch(fullUrl, {
+      method: 'GET',
+    });
+    if (!res.ok) {
+      throw new Error(`Download HTTP error: ${res.status}`);
+    }
+    const blob = await res.blob();
+    const blobUrl = window.URL.createObjectURL(blob);
+
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    setTimeout(() => {
+      window.URL.revokeObjectURL(blobUrl);
+    }, 5000);
+  } catch (error) {
+    console.warn('Direct blob download failed, trying server download fallback:', error);
+    const filenameOnly = filePath.split('/').pop() || '';
+    const fallbackUrl = `${API_BASE_URL}/api/files/download/${encodeURIComponent(filenameOnly)}?name=${encodeURIComponent(fileName)}`;
+
+    const fallbackLink = document.createElement('a');
+    fallbackLink.href = fallbackUrl;
+    fallbackLink.download = fileName;
+    fallbackLink.target = '_blank';
+    document.body.appendChild(fallbackLink);
+    fallbackLink.click();
+    document.body.removeChild(fallbackLink);
+  }
+};
+
 // ─── Auth API ────────────────────────────────────────────
 
 export const authAPI = {

@@ -9,7 +9,7 @@ import {
   Paintbrush, Eraser, Wand2, Crop, RotateCcw, Check
 } from 'lucide-react';
 import Navbar from '../components/Navbar';
-import { convertAPI } from '../services/api';
+import { convertAPI, downloadFile, getFileUrl } from '../services/api';
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
 import JSZip from 'jszip';
@@ -1235,9 +1235,12 @@ export default function ConvertPage() {
                 {result && (
                   <div className="card text-center p-6 border-green-500/20 bg-green-500/5 mt-4">
                     <h3 className="text-base font-semibold text-white mb-2">Conversion Complete!</h3>
-                    <a href={result.path} download className="btn-primary inline-flex items-center gap-2 text-xs">
+                    <button
+                      onClick={() => downloadFile(result.path, 'converted_images.pdf')}
+                      className="btn-primary inline-flex items-center gap-2 text-xs"
+                    >
                       <Download className="w-4 h-4" /> Download PDF
-                    </a>
+                    </button>
                   </div>
                 )}
               </div>
@@ -1476,13 +1479,12 @@ export default function ConvertPage() {
                             All {result.total} images packaged into a single high-speed ZIP
                           </div>
                         </div>
-                        <a
-                          href={result.zipPath}
-                          download={result.zipFilename || `batch_converted_${imageTargetFormat}.zip`}
+                        <button
+                          onClick={() => downloadFile(result.zipPath, result.zipFilename || `batch_converted_${imageTargetFormat}.zip`)}
                           className="btn-primary text-xs px-4 py-2 flex items-center gap-2 shadow-lg shadow-primary-500/20 shrink-0"
                         >
                           <Download className="w-4 h-4" /> Download ZIP Archive
-                        </a>
+                        </button>
                       </div>
                     )}
 
@@ -1491,7 +1493,7 @@ export default function ConvertPage() {
                       <div className="p-4 rounded-xl bg-surface-900 border border-surface-700 flex items-center justify-between gap-4">
                         <div className="flex items-center gap-3 truncate">
                           <img
-                            src={result.path}
+                            src={getFileUrl(result.path)}
                             alt="Converted preview"
                             className="w-14 h-14 rounded-lg object-contain bg-surface-950 border border-surface-800 shrink-0"
                           />
@@ -1504,13 +1506,12 @@ export default function ConvertPage() {
                             </div>
                           </div>
                         </div>
-                        <a
-                          href={result.path}
-                          download={result.filename}
+                        <button
+                          onClick={() => downloadFile(result.path, result.filename)}
                           className="btn-primary text-xs px-4 py-2 flex items-center gap-2 shrink-0 shadow-lg shadow-primary-500/20"
                         >
                           <Download className="w-4 h-4" /> Save {imageTargetFormat.toUpperCase()}
-                        </a>
+                        </button>
                       </div>
                     )}
 
@@ -1524,7 +1525,7 @@ export default function ConvertPage() {
                           >
                             <div className="flex items-center gap-2.5 truncate">
                               <img
-                                src={item.path}
+                                src={getFileUrl(item.path)}
                                 alt={item.displayName}
                                 className="w-10 h-10 rounded-lg object-contain bg-surface-950 border border-surface-800 shrink-0"
                               />
@@ -1537,13 +1538,12 @@ export default function ConvertPage() {
                                 </div>
                               </div>
                             </div>
-                            <a
-                              href={item.path}
-                              download={item.displayName}
+                            <button
+                              onClick={() => downloadFile(item.path, item.displayName)}
                               className="btn-secondary text-[11px] py-1.5 flex items-center justify-center gap-1.5 w-full text-surface-200 hover:text-white"
                             >
                               <Download className="w-3.5 h-3.5" /> Save
-                            </a>
+                            </button>
                           </div>
                         ))}
                       </div>
