@@ -200,47 +200,7 @@ export default function WaterRippleCursor() {
         ctx.restore();
       }
 
-      // ─── 3. Render Subtle Water Droplet Cursor ──────────
-      if (m.isHovering && m.currentX >= 0) {
-        ctx.save();
-        const outerGlowRadius = m.isDown ? 14 : 18;
-        const innerDropRadius = m.isDown ? 3.5 : 4.5;
-
-        // Soft ambient halo
-        const haloGrad = ctx.createRadialGradient(
-          m.currentX,
-          m.currentY,
-          0,
-          m.currentX,
-          m.currentY,
-          outerGlowRadius
-        );
-        haloGrad.addColorStop(0, 'rgba(56, 189, 248, 0.25)');
-        haloGrad.addColorStop(0.5, 'rgba(125, 211, 252, 0.1)');
-        haloGrad.addColorStop(1, 'rgba(56, 189, 248, 0)');
-
-        ctx.beginPath();
-        ctx.arc(m.currentX, m.currentY, outerGlowRadius, 0, Math.PI * 2);
-        ctx.fillStyle = haloGrad;
-        ctx.fill();
-
-        // Droplet center body
-        ctx.beginPath();
-        ctx.arc(m.currentX, m.currentY, innerDropRadius, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
-        ctx.shadowColor = 'rgba(56, 189, 248, 0.6)';
-        ctx.shadowBlur = 6;
-        ctx.fill();
-
-        // Specular highlight pin
-        ctx.beginPath();
-        ctx.arc(m.currentX - 1.2, m.currentY - 1.2, 1.2, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
-        ctx.fill();
-
-        ctx.restore();
-      }
-
+      // Natural OS cursor preserved without artificial follower dot
       animRef.current = requestAnimationFrame(render);
     };
 
@@ -248,9 +208,7 @@ export default function WaterRippleCursor() {
 
     return () => {
       window.removeEventListener('resize', handleResize);
-      window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerdown', handlePointerDown);
-      window.removeEventListener('pointerup', handlePointerUp);
       document.removeEventListener('mouseleave', handlePointerLeave);
       if (animRef.current) cancelAnimationFrame(animRef.current);
     };

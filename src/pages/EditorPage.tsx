@@ -54,8 +54,9 @@ export default function EditorPage() {
   // Document & element state
   const [pageElements, setPageElements] = useState<PDFElement[]>([]);
   const [selectedElement, setSelectedElement] = useState<PDFElement | null>(null);
-  const [editingTextElement, setEditingTextElement] = useState<TextElement | null>(null);
-  const [editText, setEditText] = useState('');
+  const [inlineEditingId, setInlineEditingId] = useState<string | null>(null);
+  const [inlineTextVal, setInlineTextVal] = useState('');
+  const inlineInputRef = useRef<HTMLTextAreaElement>(null);
 
   // Interactive drawing & shape state
   const [isDrawing, setIsDrawing] = useState(false);
@@ -345,7 +346,7 @@ export default function EditorPage() {
     if (selectedElement?.id === id) {
       setSelectedElement(null);
       store.setSelectedElement(null);
-      setEditingTextElement(null);
+      setInlineEditingId(null);
     }
     refreshPageElements(store.currentPage);
   }, [selectedElement, store, refreshPageElements]);
@@ -403,20 +404,29 @@ export default function EditorPage() {
       return;
     }
 
-    store.setSelectedElement(el.id);
+    // Direct in-place Word-style editing (NO side panel or modal popup)
     setSelectedElement(el);
-    setEditingTextElement(el);
-    setEditText(el.text);
-    store.setShowProperties(true);
+    store.setSelectedElement(el.id);
+    setInlineEditingId(el.id);
+    setInlineTextVal(el.text);
+    store.setShowProperties(false);
   }, [store, refreshPageElements, handleDeleteElement]);
 
-  const handleTextSave = useCallback(() => {
-    if (!editingTextElement) return;
+  const handleCommitInlineText = useCallback((id: string, textOverride?: string) => {
+    const textToSave = textOverride !== undefined ? textOverride : inlineTextVal;
     const editor = getEditor();
-    editor.editText(editingTextElement.id, { text: editText });
+    editor.editText(id, { text: textToSave });
     refreshPageElements(store.currentPage);
-    setEditingTextElement(null);
-  }, [editingTextElement, editText, store.currentPage, refreshPageElements]);
+    setInlineEditingId(null);
+  }, [inlineTextVal, store.currentPage, refreshPageElements]);
+
+  const handleUpdateTextProps = useCallback((id: string, updates: Partial<TextElement>) => {
+    const editor = getEditor();
+    editor.editText(id, updates);
+    refreshPageElements(store.currentPage);
+    const updated = editor.getElement(id);
+    if (updated) setSelectedElement(updated);
+  }, [store.currentPage, refreshPageElements]);
 
   // ─── Interactive Element Drag & Resize Handlers ─────────
 
@@ -556,9 +566,12 @@ export default function EditorPage() {
     const editor = getEditor();
 
     if (store.activeTool === 'select') {
+      if (inlineEditingId) {
+        handleCommitInlineText(inlineEditingId);
+      }
       setSelectedElement(null);
       store.setSelectedElement(null);
-      setEditingTextElement(null);
+      setInlineEditingId(null);
       return;
     }
 
@@ -573,9 +586,11 @@ export default function EditorPage() {
       });
       refreshPageElements(store.currentPage);
       setSelectedElement(newText);
-      setEditingTextElement(newText);
-      setEditText('Type text here');
+      store.setSelectedElement(newText.id);
+      setInlineEditingId(newText.id);
+      setInlineTextVal('Type text here');
       store.setActiveTool('select');
+      store.setShowProperties(false);
       return;
     }
 
@@ -877,7 +892,10 @@ export default function EditorPage() {
         }
       }
       if (e.key === 'Escape') {
-        setEditingTextElement(null);
+        if (inlineEditingId) {
+          handleCommitInlineText(inlineEditingId);
+        }
+        setInlineEditingId(null);
         setSelectedElement(null);
         store.setSelectedElement(null);
         setShowSearch(false);
@@ -1735,9 +1753,159 @@ export default function EditorPage() {
                 // Text Elements
                 if (el.type === 'text') {
                   const txt = el as TextElement;
+                  const isInlineEditing = inlineEditingId === txt.id;
                   const isMatch = searchResults.some((m) => m.element.id === txt.id);
                   const isCurrentMatch = searchResults[currentMatchIndex]?.element.id === txt.id;
                   const isEditedOrNew = txt.isEdited || !txt.isOriginal;
+
+                  if (isInlineEditing) {
+                    return (
+                      <div
+                        key={txt.id}
+                        className="absolute z-40 group"
+                        style={{
+                          left: txt.x * scale,
+                          top: txt.y * scale,
+                          minWidth: Math.max(txt.width * scale, 80),
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        onMouseDown={(e) => e.stopPropagation()}
+                      >
+                        {/* Word-Style Floating Format Bar Hovering Directly Above Text */}
+                        <div className="absolute -top-10 left-0 flex items-center gap-1.5 bg-surface-900/98 backdrop-blur-xl border border-surface-700/90 rounded-xl px-2.5 py-1 shadow-2xl text-xs text-white pointer-events-auto whitespace-nowrap z-50 animate-in fade-in slide-in-from-bottom-1">
+                          {/* Font Size +/- */}
+                          <div className="flex items-center gap-0.5 bg-surface-800 rounded-lg px-1.5 py-0.5 border border-surface-700">
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateTextProps(txt.id, { fontSize: Math.max(6, (txt.fontSize || 12) - 1) })}
+                              className="text-[11px] text-surface-300 hover:text-white px-1 font-bold"
+                              title="Decrease Font Size"
+                            >
+                              -
+                            </button>
+                            <span className="text-[10px] font-mono text-primary-300 font-bold px-1 min-w-[20px] text-center">
+                              {Math.round(txt.fontSize || 12)}pt
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateTextProps(txt.id, { fontSize: Math.min(96, (txt.fontSize || 12) + 1) })}
+                              className="text-[11px] text-surface-300 hover:text-white px-1 font-bold"
+                              title="Increase Font Size"
+                            >
+                              +
+                            </button>
+                          </div>
+
+                          {/* Bold Toggle */}
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateTextProps(txt.id, { fontWeight: txt.fontWeight === 'bold' ? 'normal' : 'bold' })}
+                            className={`px-2 py-0.5 rounded-lg text-xs font-bold transition-colors ${
+                              txt.fontWeight === 'bold' ? 'bg-primary-500 text-white' : 'hover:bg-surface-800 text-surface-300'
+                            }`}
+                            title="Bold"
+                          >
+                            B
+                          </button>
+
+                          {/* Italic Toggle */}
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateTextProps(txt.id, { fontStyle: (txt as any).fontStyle === 'italic' ? 'normal' : 'italic' } as any)}
+                            className={`px-2 py-0.5 rounded-lg text-xs font-serif italic transition-colors ${
+                              (txt as any).fontStyle === 'italic' ? 'bg-primary-500 text-white' : 'hover:bg-surface-800 text-surface-300'
+                            }`}
+                            title="Italic"
+                          >
+                            I
+                          </button>
+
+                          {/* Text Color Picker */}
+                          <div className="flex items-center gap-1 pl-1 border-l border-surface-700">
+                            <input
+                              type="color"
+                              value={txt.color || '#000000'}
+                              onChange={(e) => handleUpdateTextProps(txt.id, { color: e.target.value })}
+                              className="w-4 h-4 rounded cursor-pointer border-0 bg-transparent p-0"
+                              title="Text Color"
+                            />
+                          </div>
+
+                          {/* Actions */}
+                          <div className="w-px h-3.5 bg-surface-700 mx-0.5" />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const editor = getEditor();
+                              const dup = editor.duplicateElement(txt.id);
+                              if (dup) refreshPageElements(store.currentPage);
+                            }}
+                            className="p-1 hover:text-primary-300 rounded text-surface-400"
+                            title="Duplicate Text"
+                          >
+                            <Copy className="w-3 h-3" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              handleDeleteElement(txt.id);
+                              setInlineEditingId(null);
+                            }}
+                            className="p-1 hover:text-red-400 rounded text-surface-400"
+                            title="Delete Text"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+
+                          {/* Done Button */}
+                          <button
+                            type="button"
+                            onClick={() => handleCommitInlineText(txt.id)}
+                            className="px-2 py-0.5 bg-primary-500 hover:bg-primary-600 text-white font-semibold rounded-md text-[10px] flex items-center gap-1 shadow-sm"
+                            title="Done (or click outside)"
+                          >
+                            <Check className="w-3 h-3" />
+                            <span>Done</span>
+                          </button>
+                        </div>
+
+                        {/* In-Place Textarea with whiteout backing */}
+                        <div className="relative">
+                          <div className="absolute inset-0 bg-white shadow-sm rounded-xs pointer-events-none" />
+                          <textarea
+                            ref={inlineInputRef}
+                            value={inlineTextVal}
+                            onChange={(e) => {
+                              setInlineTextVal(e.target.value);
+                              e.target.style.height = 'auto';
+                              e.target.style.height = `${e.target.scrollHeight}px`;
+                            }}
+                            onBlur={() => handleCommitInlineText(txt.id)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Escape') {
+                                handleCommitInlineText(txt.id);
+                              }
+                              if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                                e.preventDefault();
+                                handleCommitInlineText(txt.id);
+                              }
+                            }}
+                            className="relative z-10 w-full min-h-[22px] bg-transparent text-black outline-none border border-blue-500 ring-2 ring-blue-400/40 rounded-xs p-0.5 m-0 resize-none font-sans"
+                            style={{
+                              fontSize: `${(txt.fontSize || store.fontSize || 12) * scale * 0.9}px`,
+                              fontFamily: txt.fontFamily || store.fontFamily || 'Helvetica, Arial, sans-serif',
+                              fontWeight: txt.fontWeight || 'normal',
+                              fontStyle: (txt as any).fontStyle || 'normal',
+                              color: txt.color || store.textColor || '#000000',
+                              lineHeight: 1.15,
+                              minWidth: `${Math.max(txt.width * scale, 80)}px`,
+                            }}
+                            autoFocus
+                          />
+                        </div>
+                      </div>
+                    );
+                  }
 
                   return (
                     <div
@@ -1748,12 +1916,12 @@ export default function EditorPage() {
                         isDraggingThis
                           ? 'cursor-grabbing ring-2 ring-primary-500 shadow-2xl z-30'
                           : isSelected
-                          ? 'cursor-grab ring-2 ring-primary-500 bg-primary-500/10 z-20'
+                          ? 'cursor-grab ring-2 ring-blue-500 bg-blue-500/10 z-20'
                           : isCurrentMatch
                           ? 'cursor-pointer ring-2 ring-amber-400 bg-amber-400/30 z-10'
                           : isMatch
                           ? 'cursor-pointer bg-amber-400/20 z-10'
-                          : 'cursor-pointer hover:bg-blue-500/5 hover:outline hover:outline-1 hover:outline-blue-400/30'
+                          : 'cursor-pointer hover:bg-blue-500/10 hover:outline hover:outline-1 hover:outline-blue-400/40'
                       } ${isEditedOrNew ? 'bg-white whitespace-pre overflow-hidden flex items-center px-0.5 z-10' : ''}`}
                       style={{
                         left: txt.x * scale,
@@ -1764,6 +1932,7 @@ export default function EditorPage() {
                         fontFamily: txt.fontFamily || 'Helvetica, Arial, sans-serif',
                         color: txt.color || '#000000',
                         fontWeight: txt.fontWeight || 'normal',
+                        fontStyle: (txt as any).fontStyle || 'normal',
                         lineHeight: 1,
                         touchAction: !txt.isOriginal ? 'none' : undefined,
                       }}
@@ -1791,42 +1960,6 @@ export default function EditorPage() {
 
                 return null;
               })}
-
-              {/* Inline Text Editor Popup */}
-              {editingTextElement && (
-                <div
-                  className="absolute z-40 animate-scale-in"
-                  style={{
-                    left: editingTextElement.x * scale - 4,
-                    top: editingTextElement.y * scale - 4,
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <div className="bg-surface-900 border border-primary-500 rounded-lg shadow-2xl p-2.5 min-w-[240px]">
-                    <textarea
-                      value={editText}
-                      onChange={(e) => setEditText(e.target.value)}
-                      className="bg-surface-950 text-white text-xs border border-surface-700 rounded p-1.5 w-full h-16 outline-none resize-none focus:border-primary-500"
-                      autoFocus
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !e.shiftKey) {
-                          e.preventDefault();
-                          handleTextSave();
-                        }
-                        if (e.key === 'Escape') setEditingTextElement(null);
-                      }}
-                    />
-                    <div className="flex items-center justify-between gap-1 mt-1.5 pt-1.5 border-t border-surface-800">
-                      <button onClick={handleTextSave} className="btn-primary text-[11px] px-3 py-1 flex items-center gap-1">
-                        <Check className="w-3 h-3" /> Save
-                      </button>
-                      <button onClick={() => setEditingTextElement(null)} className="btn-ghost text-[11px] px-2 py-1">
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
         </main>
 
@@ -1841,20 +1974,7 @@ export default function EditorPage() {
             </div>
 
             <div className="space-y-4">
-              {/* Text Edit in properties */}
-              {selectedElement.type === 'text' && (
-                <div>
-                  <label className="text-[11px] text-surface-400 block mb-1">Text Content</label>
-                  <textarea
-                    value={editText}
-                    onChange={(e) => setEditText(e.target.value)}
-                    className="input text-xs h-20 resize-none mb-2"
-                  />
-                  <button onClick={handleTextSave} className="btn-primary w-full text-xs py-1.5">
-                    Update Text
-                  </button>
-                </div>
-              )}
+              {/* Sticky Note Edit */}
 
               {/* Sticky Note Edit */}
               {selectedElement.type === 'annotation' && (selectedElement as AnnotationElement).annotationType === 'sticky-note' && (
