@@ -7,7 +7,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Download,
-  Maximize2, Minimize2, FileText, Check
+  Maximize2, Minimize2, FileText, Check, Loader2
 } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
 
@@ -29,7 +29,8 @@ export default function PDFPreviewModal({
   const [currentPage, setCurrentPage] = useState(initialPage);
   const [totalPages, setTotalPages] = useState(1);
   const [zoom, setZoom] = useState(100);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingDoc, setIsLoadingDoc] = useState(true);
+  const [isRenderingPage, setIsRenderingPage] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [pdfDoc, setPdfDoc] = useState<any>(null);
 
@@ -38,13 +39,11 @@ export default function PDFPreviewModal({
   const renderTaskRef = useRef<any>(null);
 
   // Fit Entire Page into Viewport
-  const fitToPage = useCallback(async (docInstance?: any, targetPage?: number) => {
-    const doc = docInstance || pdfDoc;
-    const pageNum = targetPage || currentPage;
-    if (!doc || !containerRef.current) return;
+  const fitToPage = useCallback(async () => {
+    if (!pdfDoc || !containerRef.current) return;
 
     try {
-      const page = await doc.getPage(pageNum);
+      const page = await pdfDoc.getPage(currentPage);
       const vp = page.getViewport({ scale: 1 });
       const padX = 48;
       const padY = 48;
@@ -75,39 +74,56 @@ export default function PDFPreviewModal({
     }
   }, [pdfDoc, currentPage]);
 
-  // Load PDF document from bytes & auto-fit
+  // Load PDF document from bytes - strictly isolated from zoom state
   useEffect(() => {
-    if (!isOpen || !pdfBytes) return;
+    if (!isOpen || !pdfBytes) {
+      setPdfDoc(null);
+      setIsLoadingDoc(false);
+      return;
+    }
 
     let isMounted = true;
-    setIsLoading(true);
+    setIsLoadingDoc(true);
 
-    pdfjsLib
-      .getDocument({ data: pdfBytes.slice() })
-      .promise.then(async (doc) => {
+    const load = async () => {
+      try {
+        const doc = await pdfjsLib.getDocument({ data: pdfBytes.slice() }).promise;
         if (!isMounted) return;
+
         setPdfDoc(doc);
         setTotalPages(doc.numPages);
         const pageToLoad = Math.min(initialPage, doc.numPages);
         setCurrentPage(pageToLoad);
-        setIsLoading(false);
 
-        // Compute optimal fit to page
-        setTimeout(() => {
-          if (isMounted) {
-            fitToPage(doc, pageToLoad);
-          }
-        }, 50);
-      })
-      .catch((err) => {
+        // Calculate initial optimal zoom
+        if (containerRef.current) {
+          try {
+            const page = await doc.getPage(pageToLoad);
+            const vp = page.getViewport({ scale: 1 });
+            const padX = 48;
+            const padY = 48;
+            const availW = Math.max(120, containerRef.current.clientWidth - padX);
+            const availH = Math.max(120, containerRef.current.clientHeight - padY);
+            const scale = Math.min(availW / vp.width, availH / vp.height);
+            const initialZoom = Math.max(25, Math.min(180, Math.floor(scale * 100)));
+            setZoom(initialZoom);
+          } catch {}
+        }
+      } catch (err) {
         console.error('Failed to load PDF in preview modal:', err);
-        if (isMounted) setIsLoading(false);
-      });
+      } finally {
+        if (isMounted) {
+          setIsLoadingDoc(false);
+        }
+      }
+    };
+
+    load();
 
     return () => {
       isMounted = false;
     };
-  }, [isOpen, pdfBytes, initialPage, fitToPage]);
+  }, [isOpen, pdfBytes, initialPage]);
 
   // Render Page Canvas with crisp HiDPI
   const renderPreviewPage = useCallback(
@@ -122,6 +138,7 @@ export default function PDFPreviewModal({
       }
 
       try {
+        setIsRenderingPage(true);
         const page = await pdfDoc.getPage(pageNum);
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -148,6 +165,8 @@ export default function PDFPreviewModal({
         if (err?.name !== 'RenderingCancelledException') {
           console.error('Preview render error:', err);
         }
+      } finally {
+        setIsRenderingPage(false);
       }
     },
     [pdfDoc, zoom]
@@ -211,9 +230,15 @@ export default function PDFPreviewModal({
               {fileName}
             </h3>
             <div className="flex items-center gap-1.5 text-[10px] text-surface-400">
-              <span className="text-emerald-400 font-medium flex items-center gap-1">
-                <Check className="w-3 h-3 text-emerald-400" /> Edited Preview
-              </span>
+              {isRenderingPage ? (
+                <span className="text-amber-400 font-medium flex items-center gap-1">
+                  <Loader2 className="w-3 h-3 animate-spin text-amber-400" /> Rendering page...
+                </span>
+              ) : (
+                <span className="text-emerald-400 font-medium flex items-center gap-1">
+                  <Check className="w-3 h-3 text-emerald-400" /> Edited Preview
+                </span>
+              )}
               <span>·</span>
               <span className="text-surface-400">High Precision Vector</span>
             </div>
@@ -322,10 +347,10 @@ export default function PDFPreviewModal({
         ref={containerRef}
         className="flex-1 overflow-auto p-4 sm:p-8 bg-surface-950/80 relative flex"
       >
-        {isLoading && (
+        {isLoadingDoc && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-surface-950/80 backdrop-blur-sm z-20 gap-3">
             <div className="w-10 h-10 border-3 border-primary-500/30 border-t-primary-500 rounded-full animate-spin" />
-            <p className="text-xs text-surface-300">Rendering high-res preview...</p>
+            <p className="text-xs text-surface-300">Loading document...</p>
           </div>
         )}
 
