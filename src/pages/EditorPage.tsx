@@ -281,9 +281,12 @@ export default function EditorPage() {
   const extractTextElements = async (pdfDoc: any, pageNum: number) => {
     try {
       const page = await pdfDoc.getPage(pageNum);
+      try {
+        await page.getOperatorList();
+      } catch {}
       const textContent = await page.getTextContent();
       const editor = getEditor();
-      editor.setTextElements(pageNum, textContent);
+      editor.setTextElements(pageNum, textContent, page.commonObjs);
       refreshPageElements(pageNum);
     } catch (error) {
       console.error('Text extraction error:', error);
@@ -415,14 +418,40 @@ export default function EditorPage() {
   const handleCommitInlineText = useCallback((id: string, textOverride?: string) => {
     const textToSave = textOverride !== undefined ? textOverride : inlineTextVal;
     const editor = getEditor();
-    editor.editText(id, { text: textToSave });
-    refreshPageElements(store.currentPage);
+    const currentEl = editor.getElement(id) as TextElement | null;
+
+    if (!currentEl) {
+      setInlineEditingId(null);
+      return;
+    }
+
+    // Check if the text actually changed or custom formatting was applied
+    const textChanged = textToSave !== currentEl.text;
+    const hasFormatting = Boolean((currentEl as any).hasCustomFormatting);
+
+    // If neither text nor formatting changed, do NOT mark as edited!
+    // Leave original PDF text completely untouched on the canvas!
+    if (textChanged || hasFormatting) {
+      editor.editText(id, {
+        text: textToSave,
+        fontSize: currentEl.fontSize,
+        fontFamily: currentEl.fontFamily,
+        fontWeight: currentEl.fontWeight,
+        fontStyle: (currentEl as any).fontStyle,
+        color: currentEl.color,
+      });
+      refreshPageElements(store.currentPage);
+    }
+
     setInlineEditingId(null);
   }, [inlineTextVal, store.currentPage, refreshPageElements]);
 
   const handleUpdateTextProps = useCallback((id: string, updates: Partial<TextElement>) => {
     const editor = getEditor();
-    editor.editText(id, updates);
+    editor.editText(id, {
+      ...updates,
+      hasCustomFormatting: true,
+    } as any);
     refreshPageElements(store.currentPage);
     const updated = editor.getElement(id);
     if (updated) setSelectedElement(updated);
@@ -1759,6 +1788,14 @@ export default function EditorPage() {
                   const isEditedOrNew = txt.isEdited || !txt.isOriginal;
 
                   if (isInlineEditing) {
+                    const effectiveFontSize = (txt.fontSize || 12) * scale;
+                    const effectiveFontFamily = txt.fontFamily || 'Helvetica, Arial, sans-serif';
+                    const effectiveFontWeight = txt.fontWeight || 'normal';
+                    const effectiveFontStyle = (txt as any).fontStyle || 'normal';
+                    const effectiveColor = txt.color || '#000000';
+                    const boxWidth = Math.max(txt.width * scale, 40);
+                    const boxHeight = Math.max(txt.height * scale, effectiveFontSize * 1.2);
+
                     return (
                       <div
                         key={txt.id}
@@ -1766,13 +1803,13 @@ export default function EditorPage() {
                         style={{
                           left: txt.x * scale,
                           top: txt.y * scale,
-                          minWidth: Math.max(txt.width * scale, 80),
+                          minWidth: boxWidth,
                         }}
                         onClick={(e) => e.stopPropagation()}
                         onMouseDown={(e) => e.stopPropagation()}
                       >
                         {/* Word-Style Floating Format Bar Hovering Directly Above Text */}
-                        <div className="absolute -top-10 left-0 flex items-center gap-1.5 bg-surface-900/98 backdrop-blur-xl border border-surface-700/90 rounded-xl px-2.5 py-1 shadow-2xl text-xs text-white pointer-events-auto whitespace-nowrap z-50 animate-in fade-in slide-in-from-bottom-1">
+                        <div className="absolute -top-11 left-0 flex items-center gap-1.5 bg-surface-900/98 backdrop-blur-xl border border-surface-700/90 rounded-xl px-2.5 py-1 shadow-2xl text-xs text-white pointer-events-auto whitespace-nowrap z-50 animate-in fade-in slide-in-from-bottom-1">
                           {/* Font Size +/- */}
                           <div className="flex items-center gap-0.5 bg-surface-800 rounded-lg px-1.5 py-0.5 border border-surface-700">
                             <button
@@ -1869,9 +1906,15 @@ export default function EditorPage() {
                           </button>
                         </div>
 
-                        {/* In-Place Textarea with whiteout backing */}
+                        {/* In-Place Textarea with seamless whiteout backing */}
                         <div className="relative">
-                          <div className="absolute inset-0 bg-white shadow-sm rounded-xs pointer-events-none" />
+                          <div
+                            className="absolute inset-0 bg-white pointer-events-none"
+                            style={{
+                              minHeight: `${boxHeight}px`,
+                              minWidth: `${boxWidth}px`,
+                            }}
+                          />
                           <textarea
                             ref={inlineInputRef}
                             value={inlineTextVal}
@@ -1890,15 +1933,16 @@ export default function EditorPage() {
                                 handleCommitInlineText(txt.id);
                               }
                             }}
-                            className="relative z-10 w-full min-h-[22px] bg-transparent text-black outline-none border border-blue-500 ring-2 ring-blue-400/40 rounded-xs p-0.5 m-0 resize-none font-sans"
+                            className="relative z-10 w-full bg-transparent outline-none border border-blue-500/90 ring-1 ring-blue-400/50 rounded-none p-0 m-0 resize-none leading-tight"
                             style={{
-                              fontSize: `${(txt.fontSize || store.fontSize || 12) * scale * 0.9}px`,
-                              fontFamily: txt.fontFamily || store.fontFamily || 'Helvetica, Arial, sans-serif',
-                              fontWeight: txt.fontWeight || 'normal',
-                              fontStyle: (txt as any).fontStyle || 'normal',
-                              color: txt.color || store.textColor || '#000000',
+                              fontSize: `${effectiveFontSize}px`,
+                              fontFamily: effectiveFontFamily,
+                              fontWeight: effectiveFontWeight,
+                              fontStyle: effectiveFontStyle,
+                              color: effectiveColor,
                               lineHeight: 1.15,
-                              minWidth: `${Math.max(txt.width * scale, 80)}px`,
+                              minWidth: `${boxWidth}px`,
+                              height: `${boxHeight}px`,
                             }}
                             autoFocus
                           />
@@ -1922,18 +1966,20 @@ export default function EditorPage() {
                           : isMatch
                           ? 'cursor-pointer bg-amber-400/20 z-10'
                           : 'cursor-pointer hover:bg-blue-500/10 hover:outline hover:outline-1 hover:outline-blue-400/40'
-                      } ${isEditedOrNew ? 'bg-white whitespace-pre overflow-hidden flex items-center px-0.5 z-10' : ''}`}
+                      } ${isEditedOrNew ? 'bg-white whitespace-pre overflow-hidden flex items-start z-10' : ''}`}
                       style={{
                         left: txt.x * scale,
                         top: txt.y * scale,
-                        width: txt.width * scale,
-                        height: txt.height * scale,
-                        fontSize: (txt.fontSize || 12) * scale * 0.9,
+                        width: Math.max(txt.width * scale, 20),
+                        height: Math.max(txt.height * scale, (txt.fontSize || 12) * scale * 1.15),
+                        fontSize: `${(txt.fontSize || 12) * scale}px`,
                         fontFamily: txt.fontFamily || 'Helvetica, Arial, sans-serif',
                         color: txt.color || '#000000',
                         fontWeight: txt.fontWeight || 'normal',
                         fontStyle: (txt as any).fontStyle || 'normal',
-                        lineHeight: 1,
+                        lineHeight: 1.15,
+                        padding: 0,
+                        margin: 0,
                         touchAction: !txt.isOriginal ? 'none' : undefined,
                       }}
                       onMouseDown={(e) => {

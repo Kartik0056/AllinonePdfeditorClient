@@ -224,7 +224,7 @@ export class PDFExporter {
         });
 
         // Draw new text
-        const font = await this.getFont(pdfDoc, textEl.fontFamily, new Map());
+        const font = await this.getFont(pdfDoc, textEl.fontFamily, new Map(), textEl.fontWeight, (textEl as any).fontStyle);
         const color = hexToRgb(textEl.color);
 
         page.drawText(textEl.text, {
@@ -248,7 +248,7 @@ export class PDFExporter {
     pageHeight: number,
     fontCache: Map<string, PDFFont>
   ): Promise<void> {
-    const font = await this.getFont(pdfDoc, element.fontFamily, fontCache);
+    const font = await this.getFont(pdfDoc, element.fontFamily, fontCache, element.fontWeight, (element as any).fontStyle);
     const color = hexToRgb(element.color);
 
     // Convert screen coords to PDF coords
@@ -528,34 +528,46 @@ export class PDFExporter {
   }
 
   /**
-   * Get or create a PDF font.
+   * Get or create a PDF font respecting font family, bold weight, and italic style.
    */
   private async getFont(
     pdfDoc: PDFDocument,
     fontFamily: string,
-    cache: Map<string, PDFFont>
+    cache: Map<string, PDFFont>,
+    fontWeight: 'normal' | 'bold' = 'normal',
+    fontStyle: 'normal' | 'italic' = 'normal'
   ): Promise<PDFFont> {
-    if (cache.has(fontFamily)) {
-      return cache.get(fontFamily)!;
+    const cacheKey = `${fontFamily}_${fontWeight}_${fontStyle}`;
+    if (cache.has(cacheKey)) {
+      return cache.get(cacheKey)!;
     }
 
-    // Map common font names to standard PDF fonts
-    const fontMap: Record<string, keyof typeof StandardFonts> = {
-      'Helvetica': 'Helvetica',
-      'Arial': 'Helvetica',
-      'Helvetica-Bold': 'HelveticaBold',
-      'Arial Bold': 'HelveticaBold',
-      'Times-Roman': 'TimesRoman',
-      'Times New Roman': 'TimesRoman',
-      'Times-Bold': 'TimesRomanBold',
-      'Courier': 'Courier',
-      'Courier New': 'Courier',
-      'Courier-Bold': 'CourierBold',
-    };
+    const lower = (fontFamily || '').toLowerCase();
+    const isBold = fontWeight === 'bold' || lower.includes('bold') || lower.includes('black') || lower.includes('heavy');
+    const isItalic = fontStyle === 'italic' || lower.includes('italic') || lower.includes('oblique');
 
-    const standardFontName = fontMap[fontFamily] || 'Helvetica';
+    let standardFontName: keyof typeof StandardFonts = 'Helvetica';
+
+    if (lower.includes('times') || lower.includes('serif') || lower.includes('georgia') || lower.includes('cambria') || lower.includes('garamond')) {
+      if (isBold && isItalic) standardFontName = 'TimesRomanBoldItalic';
+      else if (isBold) standardFontName = 'TimesRomanBold';
+      else if (isItalic) standardFontName = 'TimesRomanItalic';
+      else standardFontName = 'TimesRoman';
+    } else if (lower.includes('courier') || lower.includes('mono') || lower.includes('consolas')) {
+      if (isBold && isItalic) standardFontName = 'CourierBoldOblique';
+      else if (isBold) standardFontName = 'CourierBold';
+      else if (isItalic) standardFontName = 'CourierOblique';
+      else standardFontName = 'Courier';
+    } else {
+      // Helvetica / Arial / Roboto / Calibri / Sans-serif
+      if (isBold && isItalic) standardFontName = 'HelveticaBoldOblique';
+      else if (isBold) standardFontName = 'HelveticaBold';
+      else if (isItalic) standardFontName = 'HelveticaOblique';
+      else standardFontName = 'Helvetica';
+    }
+
     const font = await pdfDoc.embedFont(StandardFonts[standardFontName]);
-    cache.set(fontFamily, font);
+    cache.set(cacheKey, font);
     return font;
   }
 }

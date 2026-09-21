@@ -200,14 +200,15 @@ export class PDFEditor {
    * Set extracted text elements for a page.
    * Called by the frontend after using PDF.js getTextContent().
    */
-  setTextElements(pageNumber: number, textContent: PDFJSTextContent): TextElement[] {
+  setTextElements(pageNumber: number, textContent: PDFJSTextContent, commonObjs?: any): TextElement[] {
     const page = this.documentModel.getPage(pageNumber);
     if (!page) return [];
 
     const elements = this.textExtractor.extractTextElements(
       textContent,
       pageNumber,
-      page.height
+      page.height,
+      commonObjs
     );
 
     // Add to document model

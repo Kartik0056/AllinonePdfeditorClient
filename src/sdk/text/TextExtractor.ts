@@ -28,6 +28,109 @@ export interface PDFJSTextContent {
 }
 
 /**
+ * Resolves accurate font family, clean family name, bold weight, and italic style
+ * from PDF.js fontName, styles, and commonObjs.
+ */
+export function resolvePDFFont(
+  fontName: string,
+  commonObjs?: any,
+  styleFamily?: string
+): {
+  fontFamily: string;
+  cleanFamilyName: string;
+  fontWeight: 'normal' | 'bold';
+  fontStyle: 'normal' | 'italic';
+} {
+  let fontObj: any = null;
+  if (commonObjs) {
+    if (typeof commonObjs.get === 'function') {
+      fontObj = commonObjs.get(fontName);
+    } else if (commonObjs[fontName]) {
+      fontObj = commonObjs[fontName];
+    }
+  }
+
+  const rawName = (fontObj?.name || fontName || '').trim();
+  // Strip 6-letter subset prefix (e.g. 'AAAAAA+Roboto-Regular' -> 'Roboto-Regular')
+  const strippedName = rawName.replace(/^[A-Z]{6}\+/, '');
+  const lower = strippedName.toLowerCase();
+
+  // Detect bold: check flags, name substrings, or CSS weight
+  const isBold = Boolean(
+    fontObj?.bold ||
+    fontObj?.black ||
+    /bold|black|heavy|w[7-9]|700|800|900/i.test(strippedName) ||
+    /bold|black|heavy/i.test(fontName)
+  );
+
+  // Detect italic
+  const isItalic = Boolean(
+    fontObj?.italic ||
+    /italic|oblique|slant/i.test(strippedName) ||
+    /italic|oblique/i.test(fontName)
+  );
+
+  // Map known typeface families to real font families with appropriate fallbacks
+  let cleanFamily = 'sans-serif';
+
+  if (lower.includes('times') || lower.includes('georgia') || lower.includes('cambria') || lower.includes('garamond') || lower.includes('serif')) {
+    if (lower.includes('times')) cleanFamily = '"Times New Roman", Times, Georgia, serif';
+    else if (lower.includes('georgia')) cleanFamily = 'Georgia, "Times New Roman", serif';
+    else if (lower.includes('cambria')) cleanFamily = 'Cambria, Georgia, serif';
+    else if (lower.includes('garamond')) cleanFamily = 'Garamond, Georgia, serif';
+    else cleanFamily = '"Times New Roman", serif';
+  } else if (lower.includes('courier') || lower.includes('mono') || lower.includes('consolas') || lower.includes('menlo')) {
+    if (lower.includes('courier')) cleanFamily = '"Courier New", Courier, monospace';
+    else if (lower.includes('consolas')) cleanFamily = 'Consolas, monospace';
+    else cleanFamily = 'monospace';
+  } else if (lower.includes('roboto')) {
+    cleanFamily = 'Roboto, system-ui, -apple-system, sans-serif';
+  } else if (lower.includes('arial')) {
+    cleanFamily = 'Arial, Helvetica, sans-serif';
+  } else if (lower.includes('calibri')) {
+    cleanFamily = 'Calibri, Arial, sans-serif';
+  } else if (lower.includes('helvetica')) {
+    cleanFamily = 'Helvetica, Arial, sans-serif';
+  } else if (lower.includes('verdana')) {
+    cleanFamily = 'Verdana, Geneva, sans-serif';
+  } else if (lower.includes('tahoma')) {
+    cleanFamily = 'Tahoma, Verdana, sans-serif';
+  } else if (lower.includes('trebuchet')) {
+    cleanFamily = '"Trebuchet MS", sans-serif';
+  } else if (lower.includes('open sans') || lower.includes('opensans')) {
+    cleanFamily = '"Open Sans", sans-serif';
+  } else if (lower.includes('lato')) {
+    cleanFamily = 'Lato, sans-serif';
+  } else if (lower.includes('montserrat')) {
+    cleanFamily = 'Montserrat, sans-serif';
+  } else if (lower.includes('poppins')) {
+    cleanFamily = 'Poppins, sans-serif';
+  } else if (lower.includes('inter')) {
+    cleanFamily = 'Inter, sans-serif';
+  } else if (strippedName.length > 0) {
+    const base = strippedName
+      .replace(/[-_,](Bold|Italic|Regular|Roman|Medium|Light|Black|SemiBold|Oblique|MT|PSMT|PS|W\d+)/gi, '')
+      .replace(/(Bold|Italic|Regular|Roman|Medium|Light|Black|SemiBold|Oblique|MT|PSMT)$/gi, '')
+      .trim();
+    const fallback = styleFamily || (lower.includes('serif') ? 'serif' : 'sans-serif');
+    cleanFamily = base ? `"${base}", ${fallback}` : fallback;
+  } else {
+    cleanFamily = styleFamily || 'sans-serif';
+  }
+
+  // Loaded font name from PDF.js (e.g. 'g_d0_f1')
+  const loadedName = fontObj?.loadedName || fontName;
+  const fullFontFamily = loadedName ? `"${loadedName}", ${cleanFamily}` : cleanFamily;
+
+  return {
+    fontFamily: fullFontFamily,
+    cleanFamilyName: cleanFamily.split(',')[0].replace(/"/g, '').trim(),
+    fontWeight: isBold ? 'bold' : 'normal',
+    fontStyle: isItalic ? 'italic' : 'normal',
+  };
+}
+
+/**
  * Extracts text elements from PDF.js text content results.
  * Maps PDF coordinate system to our TextElement model.
  */
@@ -39,7 +142,8 @@ export class TextExtractor {
   extractTextElements(
     textContent: PDFJSTextContent,
     pageNumber: number,
-    pageHeight: number
+    pageHeight: number,
+    commonObjs?: any
   ): TextElement[] {
     const elements: TextElement[] = [];
 
@@ -48,10 +152,12 @@ export class TextExtractor {
 
       const { x, y, scaleX, scaleY, rotation } = parseTransformMatrix(item.transform);
       const fontSize = Math.abs(scaleY) || Math.abs(scaleX) || 12;
-      const style = textContent.styles[item.fontName] || {};
+      const style = textContent.styles[item.fontName] || ({} as any);
 
       // Convert PDF coordinates (origin bottom-left) to screen coordinates (origin top-left)
       const screenY = pageHeight - y;
+
+      const fontMeta = resolvePDFFont(item.fontName, commonObjs, style.fontFamily);
 
       const element: TextElement = {
         id: generateId(),
@@ -62,10 +168,10 @@ export class TextExtractor {
         y: screenY - fontSize, // Adjust for text baseline
         width: item.width || item.str.length * fontSize * 0.6,
         height: fontSize * 1.3,
-        fontFamily: style.fontFamily || 'Helvetica',
+        fontFamily: fontMeta.fontFamily,
         fontSize: Math.round(fontSize * 10) / 10,
-        fontWeight: this.detectFontWeight(item.fontName),
-        fontStyle: this.detectFontStyle(item.fontName),
+        fontWeight: fontMeta.fontWeight,
+        fontStyle: fontMeta.fontStyle,
         textDecoration: 'none',
         color: '#000000',
         backgroundColor: 'transparent',
@@ -153,26 +259,5 @@ export class TextExtractor {
       width: (last.x + last.width) - first.x,
     };
   }
-
-  /**
-   * Detect font weight from PDF.js font name.
-   */
-  private detectFontWeight(fontName: string): 'normal' | 'bold' {
-    const lower = fontName.toLowerCase();
-    if (lower.includes('bold') || lower.includes('black') || lower.includes('heavy')) {
-      return 'bold';
-    }
-    return 'normal';
-  }
-
-  /**
-   * Detect font style from PDF.js font name.
-   */
-  private detectFontStyle(fontName: string): 'normal' | 'italic' {
-    const lower = fontName.toLowerCase();
-    if (lower.includes('italic') || lower.includes('oblique') || lower.includes('slant')) {
-      return 'italic';
-    }
-    return 'normal';
-  }
 }
+
