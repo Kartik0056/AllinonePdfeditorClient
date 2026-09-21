@@ -1,0 +1,194 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --editor-sidebar-width: 220px;
+    --editor-toolbar-height: 48px;
+    --editor-header-height: 52px;
+    --editor-properties-width: 280px;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 3px;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.25);
+  }
+
+  html,
+  body {
+    overflow-x: hidden;
+    overflow-y: auto;
+    font-feature-settings: 'cv11', 'ss01';
+  }
+}
+
+@layer components {
+  /* ─── Glass Effect ────────────────────────────── */
+  .glass {
+    background: rgba(24, 24, 27, 0.75);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .glass-light {
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  /* ─── Button Styles ────────────────────────────── */
+  .btn-primary {
+    @apply px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white rounded-lg
+           font-medium text-sm transition-all duration-200
+           shadow-lg shadow-primary-600/20 hover:shadow-primary-500/30
+           active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-secondary {
+    @apply px-4 py-2 bg-surface-800 hover:bg-surface-700 text-surface-200
+           rounded-lg font-medium text-sm transition-all duration-200
+           border border-surface-700 hover:border-surface-600
+           active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-ghost {
+    @apply px-3 py-1.5 hover:bg-surface-800 text-surface-400 hover:text-surface-200
+           rounded-md text-sm transition-all duration-150
+           active:scale-[0.97];
+  }
+
+  .btn-icon {
+    @apply p-2 hover:bg-surface-800 text-surface-400 hover:text-surface-200
+           rounded-lg transition-all duration-150 active:scale-[0.95]
+           flex items-center justify-center;
+  }
+
+  .btn-icon.active {
+    @apply bg-primary-600/20 text-primary-400 hover:bg-primary-600/30;
+  }
+
+  .btn-danger {
+    @apply px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg
+           font-medium text-sm transition-all duration-200
+           active:scale-[0.97] disabled:opacity-50;
+  }
+
+  /* ─── Input Styles ────────────────────────────── */
+  .input {
+    @apply w-full px-3 py-2 bg-surface-900 border border-surface-700
+           rounded-lg text-surface-200 text-sm placeholder-surface-500
+           focus:outline-none focus:ring-2 focus:ring-primary-500/40
+           focus:border-primary-500 transition-all duration-200;
+  }
+
+  .input-sm {
+    @apply px-2 py-1 bg-surface-900 border border-surface-700
+           rounded-md text-surface-200 text-xs
+           focus:outline-none focus:ring-1 focus:ring-primary-500/40
+           focus:border-primary-500 transition-all duration-200;
+  }
+
+  /* ─── Card ────────────────────────────────────── */
+  .card {
+    @apply bg-surface-900/80 border border-surface-800 rounded-xl p-6
+           backdrop-blur-sm transition-all duration-300;
+  }
+
+  .card-hover {
+    @apply card hover:border-surface-700 hover:shadow-glass cursor-pointer
+           hover:translate-y-[-2px];
+  }
+
+  /* ─── Tooltip ─────────────────────────────────── */
+  .tooltip {
+    @apply absolute z-50 px-2 py-1 text-xs font-medium text-white
+           bg-surface-800 border border-surface-700 rounded-md
+           shadow-lg pointer-events-none whitespace-nowrap
+           animate-fade-in;
+  }
+
+  /* ─── Editor specific ─────────────────────────── */
+  .editor-canvas-container {
+    @apply relative overflow-auto bg-surface-950;
+    background-image:
+      radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.03) 1px, transparent 0);
+    background-size: 24px 24px;
+  }
+
+  .page-shadow {
+    box-shadow:
+      0 4px 6px -1px rgba(0, 0, 0, 0.3),
+      0 2px 4px -2px rgba(0, 0, 0, 0.2),
+      0 0 0 1px rgba(255, 255, 255, 0.03);
+  }
+
+  .thumbnail-active {
+    @apply ring-2 ring-primary-500 ring-offset-2 ring-offset-surface-900;
+  }
+
+  /* ─── Selection Handles ────────────────────────── */
+  .selection-handle {
+    @apply absolute w-2.5 h-2.5 bg-primary-500 border-2 border-white
+           rounded-full cursor-pointer shadow-sm z-50;
+  }
+
+  /* ─── Drop Zone ────────────────────────────────── */
+  .dropzone {
+    @apply border-2 border-dashed border-surface-600 rounded-2xl p-12
+           text-center transition-all duration-300 cursor-pointer
+           hover:border-primary-500/50 hover:bg-primary-500/5;
+  }
+
+  .dropzone.active {
+    @apply border-primary-500 bg-primary-500/10 scale-[1.02];
+  }
+
+  /* ─── Gradient Text ────────────────────────────── */
+  .gradient-text {
+    @apply bg-gradient-to-r from-primary-400 via-purple-400 to-pink-400
+           bg-clip-text text-transparent;
+  }
+
+  /* ─── Loading Shimmer ──────────────────────────── */
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, 0.05) 50%,
+      rgba(255, 255, 255, 0) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 2s linear infinite;
+  }
+
+  /* ─── Divider ──────────────────────────────────── */
+  .divider-v {
+    @apply w-px h-6 bg-surface-700 mx-1;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
