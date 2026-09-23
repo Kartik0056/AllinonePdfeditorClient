@@ -80,9 +80,41 @@ const features = [
   },
 ];
 
+const BACKGROUND_PARTICLES = [
+  { top: '6%', left: '12%', size: 3, color: '#818cf8', duration: 7, delay: 0, opacity: 0.7 },
+  { top: '12%', left: '76%', size: 2.5, color: '#38bdf8', duration: 9, delay: 1.5, opacity: 0.8 },
+  { top: '20%', left: '30%', size: 3.5, color: '#c084fc', duration: 8, delay: 3, opacity: 0.6 },
+  { top: '26%', left: '88%', size: 2, color: '#f472b6', duration: 11, delay: 0.5, opacity: 0.7 },
+  { top: '34%', left: '6%', size: 2.5, color: '#34d399', duration: 10, delay: 2, opacity: 0.6 },
+  { top: '40%', left: '65%', size: 3, color: '#fbbf24', duration: 7.5, delay: 4, opacity: 0.7 },
+  { top: '48%', left: '20%', size: 2, color: '#818cf8', duration: 9.5, delay: 2.5, opacity: 0.8 },
+  { top: '56%', left: '82%', size: 3, color: '#38bdf8', duration: 8.5, delay: 1, opacity: 0.6 },
+  { top: '64%', left: '45%', size: 2.5, color: '#c084fc', duration: 10.5, delay: 3.5, opacity: 0.7 },
+  { top: '72%', left: '10%', size: 3, color: '#f472b6', duration: 9, delay: 0.8, opacity: 0.6 },
+  { top: '80%', left: '75%', size: 2, color: '#34d399', duration: 11.5, delay: 2.2, opacity: 0.7 },
+  { top: '88%', left: '28%', size: 3.5, color: '#fbbf24', duration: 8, delay: 4.5, opacity: 0.6 },
+  { top: '16%', left: '48%', size: 2, color: '#ffffff', duration: 6.5, delay: 1.2, opacity: 0.8 },
+  { top: '46%', left: '92%', size: 2.5, color: '#818cf8', duration: 10, delay: 3.2, opacity: 0.7 },
+  { top: '74%', left: '58%', size: 2, color: '#38bdf8', duration: 7.8, delay: 0.2, opacity: 0.6 },
+  { top: '92%', left: '85%', size: 3, color: '#c084fc', duration: 9.2, delay: 2.8, opacity: 0.7 },
+  { top: '9%', left: '90%', size: 2, color: '#f472b6', duration: 8.7, delay: 3.8, opacity: 0.6 },
+  { top: '30%', left: '40%', size: 3, color: '#ffffff', duration: 7.2, delay: 1.8, opacity: 0.9 },
+  { top: '60%', left: '5%', size: 2.5, color: '#818cf8', duration: 11, delay: 4.2, opacity: 0.7 },
+  { top: '84%', left: '38%', size: 2, color: '#34d399', duration: 8.4, delay: 0.9, opacity: 0.8 },
+  { top: '4%', left: '38%', size: 2.5, color: '#38bdf8', duration: 9.8, delay: 2.1, opacity: 0.7 },
+  { top: '24%', left: '16%', size: 3, color: '#fbbf24', duration: 7.6, delay: 3.6, opacity: 0.6 },
+  { top: '53%', left: '70%', size: 2, color: '#c084fc', duration: 10.2, delay: 1.4, opacity: 0.7 },
+  { top: '68%', left: '94%', size: 3, color: '#f472b6', duration: 8.9, delay: 2.7, opacity: 0.6 },
+];
+
 export default function LandingPage() {
   const navigate = useNavigate();
   const [isDragging, setIsDragging] = useState(false);
+  const [mousePos, setMousePos] = useState<{ x: number; y: number }>({ x: -1000, y: -1000 });
+
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    setMousePos({ x: e.clientX, y: e.clientY });
+  }, []);
 
   // Interactive Live Demo State
   const [demoText, setDemoText] = useState('Alexander Montgomery');
@@ -111,26 +143,109 @@ export default function LandingPage() {
   }, [handleFileSelect]);
 
   return (
-    <div className="min-h-screen bg-surface-950 text-surface-100 flex flex-col font-sans selection:bg-primary-500/30">
+    <div
+      onMouseMove={handleMouseMove}
+      className="min-h-screen bg-surface-950 text-surface-100 flex flex-col font-sans selection:bg-primary-500/30 relative overflow-hidden"
+    >
       <Navbar />
 
-      {/* Subtle Studio Grid Background */}
-      <div className="fixed inset-0 pointer-events-none -z-10 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-surface-900/50 via-surface-950 to-surface-950">
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:3.5rem_3.5rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)]" />
+      {/* ─── ULTRA-PREMIUM ANIMATED LIVING BACKGROUND ──────────────── */}
+      <div className="fixed inset-0 pointer-events-none -z-10 overflow-hidden">
+        {/* Base Canvas */}
+        <div className="absolute inset-0 bg-surface-950" />
+
+        {/* Top Radiant Beam / Header Glow Flare */}
+        <div className="absolute -top-36 left-1/2 -translate-x-1/2 w-[1100px] h-[400px] bg-gradient-to-b from-primary-500/35 via-purple-600/20 to-transparent blur-[100px] rounded-full pointer-events-none opacity-90" />
+
+        {/* Interactive Mouse Spotlight Glow */}
+        {mousePos.x > -100 && (
+          <div
+            className="absolute inset-0 transition-opacity duration-300 pointer-events-none"
+            style={{
+              background: `radial-gradient(650px circle at ${mousePos.x}px ${mousePos.y}px, rgba(99, 102, 241, 0.18), rgba(168, 85, 247, 0.08) 35%, transparent 75%)`,
+            }}
+          />
+        )}
+
+        {/* Luminous Animated Aurora Orb 1: Electric Indigo / Cobalt */}
+        <div
+          className="absolute -top-16 -left-20 w-[600px] h-[600px] rounded-full blur-[110px] animate-aurora-1 pointer-events-none"
+          style={{
+            background: 'radial-gradient(circle, rgba(99, 102, 241, 0.40) 0%, rgba(79, 70, 229, 0.25) 50%, transparent 75%)',
+          }}
+        />
+
+        {/* Luminous Animated Aurora Orb 2: Cyber Cyan / Emerald */}
+        <div
+          className="absolute top-1/4 -right-28 w-[650px] h-[650px] rounded-full blur-[120px] animate-aurora-2 pointer-events-none"
+          style={{
+            background: 'radial-gradient(circle, rgba(6, 182, 212, 0.35) 0%, rgba(16, 185, 129, 0.20) 50%, transparent 75%)',
+          }}
+        />
+
+        {/* Luminous Animated Aurora Orb 3: Deep Purple / Fuchsia Glow */}
+        <div
+          className="absolute top-1/2 left-1/4 w-[700px] h-[700px] rounded-full blur-[130px] animate-aurora-3 pointer-events-none"
+          style={{
+            background: 'radial-gradient(circle, rgba(168, 85, 247, 0.32) 0%, rgba(236, 72, 153, 0.18) 50%, transparent 75%)',
+          }}
+        />
+
+        {/* Luminous Animated Aurora Orb 4: Warm Gold / Amber Accent */}
+        <div
+          className="absolute bottom-10 right-1/4 w-[550px] h-[550px] rounded-full blur-[110px] animate-aurora-4 pointer-events-none"
+          style={{
+            background: 'radial-gradient(circle, rgba(245, 158, 11, 0.24) 0%, rgba(217, 119, 6, 0.12) 50%, transparent 75%)',
+          }}
+        />
+
+        {/* Cyber Studio Grid with Moving Laser Sweep Beam */}
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff08_1px,transparent_1px),linear-gradient(to_bottom,#ffffff08_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_75%_65%_at_50%_20%,#000_65%,transparent_100%)] pointer-events-none">
+          {/* Animated Sweeping Light Ray */}
+          <div className="absolute inset-x-0 h-48 bg-gradient-to-b from-transparent via-primary-500/15 to-transparent animate-beam-sweep pointer-events-none" />
+        </div>
+
+        {/* Architectural Tech Rings behind Hero Heading */}
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 w-[750px] h-[750px] pointer-events-none flex items-center justify-center">
+          <div className="w-full h-full rounded-full border border-primary-500/15 animate-pulse-ring" />
+          <div className="absolute w-[540px] h-[540px] rounded-full border border-dashed border-purple-500/20 animate-spin-ultra-slow" />
+          <div className="absolute w-[360px] h-[360px] rounded-full border border-cyan-500/15 animate-pulse-ring" style={{ animationDelay: '-4s' }} />
+        </div>
+
+        {/* Floating Twinkling Particles / Starfield */}
+        <div className="absolute inset-0 pointer-events-none">
+          {BACKGROUND_PARTICLES.map((p, idx) => (
+            <span
+              key={idx}
+              className="absolute rounded-full"
+              style={{
+                top: p.top,
+                left: p.left,
+                width: `${p.size}px`,
+                height: `${p.size}px`,
+                backgroundColor: p.color,
+                boxShadow: `0 0 ${p.size * 3}px ${p.color}`,
+                animation: `float-particle ${p.duration}s ease-in-out infinite`,
+                animationDelay: `${p.delay}s`,
+                opacity: p.opacity,
+              }}
+            />
+          ))}
+        </div>
       </div>
 
       {/* Hero Section */}
-      <section className="pt-12 sm:pt-16 pb-16 px-4 sm:px-6 max-w-6xl mx-auto w-full text-center">
+      <section className="pt-12 sm:pt-16 pb-16 px-4 sm:px-6 max-w-6xl mx-auto w-full text-center relative z-10">
         {/* Human Pill Tag */}
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-surface-900 border border-surface-700/80 text-surface-300 text-xs font-medium mb-6 shadow-sm">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-surface-900/80 border border-primary-500/30 text-surface-200 text-xs font-medium mb-6 shadow-[0_0_20px_rgba(99,102,241,0.25)] backdrop-blur-xl hover:border-primary-500/50 transition-colors">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
           <span>No Signups Required · 100% Private in Your Browser · Free Forever</span>
         </div>
 
         {/* Main Human-Crafted Heading */}
         <h1 className="text-4xl sm:text-5xl md:text-6xl font-black text-white tracking-tight leading-[1.1] mb-5 max-w-4xl mx-auto">
           Direct In-Place PDF Editing. <br className="hidden sm:inline" />
-          <span className="bg-gradient-to-r from-white via-surface-200 to-surface-400 bg-clip-text text-transparent">
+          <span className="bg-gradient-to-r from-white via-indigo-100 to-primary-300 bg-clip-text text-transparent">
             Just Like Microsoft Word.
           </span>
         </h1>
@@ -142,10 +257,10 @@ export default function LandingPage() {
         {/* Dropzone & Primary Action */}
         <div className="max-w-2xl mx-auto mb-12">
           <div
-            className={`p-8 rounded-2xl border-2 border-dashed transition-all cursor-pointer bg-surface-900/40 backdrop-blur-md ${
+            className={`p-8 rounded-2xl border-2 border-dashed transition-all cursor-pointer bg-surface-900/50 backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.5)] ${
               isDragging
-                ? 'border-primary-500 bg-primary-500/10 scale-[1.01]'
-                : 'border-surface-700/80 hover:border-primary-500/60 hover:bg-surface-900/70'
+                ? 'border-primary-500 bg-primary-500/15 scale-[1.01] shadow-[0_0_40px_rgba(99,102,241,0.3)]'
+                : 'border-surface-700/80 hover:border-primary-500/70 hover:bg-surface-900/80 hover:shadow-[0_12px_40px_rgba(99,102,241,0.18)]'
             }`}
             onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
             onDragLeave={() => setIsDragging(false)}
@@ -160,14 +275,14 @@ export default function LandingPage() {
               onChange={(e) => handleFileSelect(e.target.files)}
             />
 
-            <div className="w-12 h-12 rounded-2xl bg-surface-800/80 border border-surface-700 flex items-center justify-center mx-auto mb-3 shadow-inner">
-              <Upload className="w-5 h-5 text-primary-400" />
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-surface-800 to-surface-900 border border-surface-700/80 flex items-center justify-center mx-auto mb-3.5 shadow-lg shadow-black/40 group-hover:scale-105 transition-transform">
+              <Upload className="w-6 h-6 text-primary-400" />
             </div>
 
-            <h3 className="text-sm font-bold text-white mb-1">
+            <h3 className="text-base font-bold text-white mb-1.5">
               Drop a PDF here or <span className="text-primary-400 hover:underline">browse files</span>
             </h3>
-            <p className="text-xs text-surface-400">
+            <p className="text-xs text-surface-400 max-w-md mx-auto">
               Files are processed entirely in your browser using local WebAssembly. Zero data uploaded.
             </p>
           </div>
@@ -175,7 +290,7 @@ export default function LandingPage() {
           <div className="flex flex-wrap items-center justify-center gap-3 mt-4">
             <Link
               to="/editor"
-              className="btn-primary text-xs sm:text-sm px-5 py-2.5 flex items-center gap-2 font-bold shadow-lg shadow-primary-500/20"
+              className="btn-primary text-xs sm:text-sm px-5 py-2.5 flex items-center gap-2 font-bold shadow-lg shadow-primary-500/25 hover:shadow-primary-500/40 hover:-translate-y-0.5 transition-all"
             >
               <FileText className="w-4 h-4" />
               <span>Open Blank PDF Editor</span>
@@ -183,7 +298,7 @@ export default function LandingPage() {
 
             <Link
               to="/certificate"
-              className="btn-secondary text-xs sm:text-sm px-4 py-2.5 flex items-center gap-2 font-semibold"
+              className="btn-secondary text-xs sm:text-sm px-4 py-2.5 flex items-center gap-2 font-semibold hover:-translate-y-0.5 transition-all shadow-md"
             >
               <Award className="w-4 h-4 text-amber-400" />
               <span>Certificate Studio</span>
@@ -191,7 +306,7 @@ export default function LandingPage() {
 
             <Link
               to="/passport-photo"
-              className="btn-secondary text-xs sm:text-sm px-4 py-2.5 flex items-center gap-2 font-semibold"
+              className="btn-secondary text-xs sm:text-sm px-4 py-2.5 flex items-center gap-2 font-semibold hover:-translate-y-0.5 transition-all shadow-md"
             >
               <Camera className="w-4 h-4 text-cyan-400" />
               <span>Passport Photo Maker</span>
@@ -200,7 +315,7 @@ export default function LandingPage() {
         </div>
 
         {/* ─── INTERACTIVE LIVE IN-PLACE EDITING SHOWCASE ─────────────── */}
-        <div className="max-w-3xl mx-auto rounded-2xl border border-surface-800 bg-surface-900/60 p-6 sm:p-8 backdrop-blur-xl shadow-2xl text-left">
+        <div className="max-w-3xl mx-auto rounded-2xl border border-surface-700/80 bg-surface-900/75 p-6 sm:p-8 backdrop-blur-2xl shadow-[0_20px_50px_rgba(0,0,0,0.6)] text-left hover:border-surface-600 transition-colors">
           <div className="flex items-center justify-between pb-4 mb-4 border-b border-surface-800">
             <div className="flex items-center gap-2">
               <span className="w-3 h-3 rounded-full bg-red-500/80" />

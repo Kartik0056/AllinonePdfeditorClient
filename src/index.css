@@ -185,6 +185,151 @@
   .divider-v {
     @apply w-px h-6 bg-surface-700 mx-1;
   }
+
+  /* ─── Rich Ambient Background Animations ──────── */
+  @keyframes aurora-1 {
+    0% {
+      transform: translate3d(0px, 0px, 0) scale(1) rotate(0deg);
+    }
+    33% {
+      transform: translate3d(80px, -50px, 0) scale(1.18) rotate(45deg);
+    }
+    66% {
+      transform: translate3d(-50px, 60px, 0) scale(0.92) rotate(90deg);
+    }
+    100% {
+      transform: translate3d(0px, 0px, 0) scale(1) rotate(0deg);
+    }
+  }
+
+  @keyframes aurora-2 {
+    0% {
+      transform: translate3d(0px, 0px, 0) scale(1) rotate(0deg);
+    }
+    33% {
+      transform: translate3d(-90px, 70px, 0) scale(1.22) rotate(-60deg);
+    }
+    66% {
+      transform: translate3d(60px, -40px, 0) scale(0.88) rotate(-120deg);
+    }
+    100% {
+      transform: translate3d(0px, 0px, 0) scale(1) rotate(0deg);
+    }
+  }
+
+  @keyframes aurora-3 {
+    0% {
+      transform: translate3d(0px, 0px, 0) scale(0.95);
+      opacity: 0.35;
+    }
+    50% {
+      transform: translate3d(-60px, -70px, 0) scale(1.25);
+      opacity: 0.65;
+    }
+    100% {
+      transform: translate3d(0px, 0px, 0) scale(0.95);
+      opacity: 0.35;
+    }
+  }
+
+  @keyframes aurora-4 {
+    0% {
+      transform: translate3d(0px, 0px, 0) scale(1);
+    }
+    50% {
+      transform: translate3d(80px, 50px, 0) scale(1.2);
+    }
+    100% {
+      transform: translate3d(0px, 0px, 0) scale(1);
+    }
+  }
+
+  @keyframes float-particle {
+    0% {
+      transform: translate3d(0px, 0px, 0);
+      opacity: 0.2;
+    }
+    50% {
+      transform: translate3d(12px, -30px, 0);
+      opacity: 0.9;
+    }
+    100% {
+      transform: translate3d(0px, 0px, 0);
+      opacity: 0.2;
+    }
+  }
+
+  @keyframes beam-sweep {
+    0% {
+      transform: translateY(-100%);
+      opacity: 0;
+    }
+    15% {
+      opacity: 0.8;
+    }
+    85% {
+      opacity: 0.8;
+    }
+    100% {
+      transform: translateY(1100px);
+      opacity: 0;
+    }
+  }
+
+  @keyframes pulse-ring {
+    0%, 100% {
+      transform: scale(1);
+      opacity: 0.15;
+    }
+    50% {
+      transform: scale(1.08);
+      opacity: 0.35;
+    }
+  }
+
+  @keyframes spin-ultra-slow {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .animate-aurora-1 {
+    animation: aurora-1 18s ease-in-out infinite;
+    will-change: transform;
+  }
+
+  .animate-aurora-2 {
+    animation: aurora-2 22s ease-in-out infinite;
+    will-change: transform;
+  }
+
+  .animate-aurora-3 {
+    animation: aurora-3 26s ease-in-out infinite;
+    will-change: transform, opacity;
+  }
+
+  .animate-aurora-4 {
+    animation: aurora-4 20s ease-in-out infinite;
+    will-change: transform;
+  }
+
+  .animate-spin-ultra-slow {
+    animation: spin-ultra-slow 100s linear infinite;
+    will-change: transform;
+  }
+
+  .animate-pulse-ring {
+    animation: pulse-ring 8s ease-in-out infinite;
+    will-change: transform, opacity;
+  }
+
+  .animate-beam-sweep {
+    animation: beam-sweep 9s ease-in-out infinite;
+    will-change: transform, opacity;
+  }
 }
 
 @layer utilities {

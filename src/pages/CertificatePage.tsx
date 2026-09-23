@@ -1538,26 +1538,31 @@ export default function CertificatePage() {
         const rect = mainContainerRef.current.getBoundingClientRect();
         if (rect.width > 0 && rect.height > 0) {
           setContainerSize({ width: rect.width, height: rect.height });
-        } else {
-          setContainerSize({
-            width: typeof window !== 'undefined' ? window.innerWidth : 400,
-            height: typeof window !== 'undefined' ? (window.innerWidth < 1024 ? 320 : window.innerHeight - 150) : 500,
-          });
+          return;
         }
-      } else {
-        setContainerSize({
-          width: typeof window !== 'undefined' ? window.innerWidth : 400,
-          height: typeof window !== 'undefined' ? (window.innerWidth < 1024 ? 320 : window.innerHeight - 150) : 500,
-        });
       }
+      setContainerSize({
+        width: typeof window !== 'undefined' ? window.innerWidth : 400,
+        height: typeof window !== 'undefined' ? (window.innerWidth < 1024 ? 320 : window.innerHeight - 150) : 500,
+      });
     };
 
     updateSize();
     const rafId = requestAnimationFrame(updateSize);
     window.addEventListener('resize', updateSize);
+
+    let resizeObserver: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined' && mainContainerRef.current) {
+      resizeObserver = new ResizeObserver(() => {
+        updateSize();
+      });
+      resizeObserver.observe(mainContainerRef.current);
+    }
+
     return () => {
       cancelAnimationFrame(rafId);
       window.removeEventListener('resize', updateSize);
+      if (resizeObserver) resizeObserver.disconnect();
     };
   }, [sidebarWidth, activeTab, mobileViewMode]);
 
@@ -2745,36 +2750,39 @@ export default function CertificatePage() {
           </div>
 
           {/* Right Visual Certificate Canvas Viewport (Independently scrollable & Auto-fitting) */}
-          <main
-            ref={mainContainerRef}
+          <div
             className={`${
               mobileViewMode === 'tools' ? 'hidden lg:flex' : 'flex'
-            } flex-1 bg-surface-950 flex-col ${
+            } flex-1 flex-col ${
               mobileViewMode === 'split' ? 'min-h-[280px] h-auto shrink-0 border-b border-surface-800' : 'h-full'
-            } lg:h-full overflow-auto min-w-0 min-h-0 p-2 sm:p-4 lg:p-6 relative touch-pan-x touch-pan-y`}
+            } lg:h-full min-w-0 min-h-0 relative overflow-hidden`}
           >
-            <div className="m-auto flex items-center justify-center py-2 sm:py-4">
-              {/* Scaled Certificate Wrapper */}
-              <div
-                style={{
-                  width: `${Math.round(baseWidth * currentScale)}px`,
-                  height: `${Math.round(baseHeight * currentScale)}px`,
-                  transition: isResizingSidebar ? 'none' : 'width 0.15s ease-out, height 0.15s ease-out',
-                }}
-                className="relative flex items-center justify-center shrink-0 select-none shadow-2xl"
-              >
+            <main
+              ref={mainContainerRef}
+              className="flex-1 bg-surface-950 overflow-auto min-w-0 min-h-0 relative touch-pan-x touch-pan-y flex"
+            >
+              <div className="w-fit h-fit min-w-full min-h-full m-auto flex items-center justify-center p-4 sm:p-6 lg:p-8 pb-20">
+                {/* Scaled Certificate Wrapper */}
                 <div
-                  ref={certificateRef}
-                  className="relative shadow-2xl overflow-hidden select-none origin-top-left"
                   style={{
-                    width: `${baseWidth}px`,
-                    height: `${baseHeight}px`,
-                    transform: `scale(${currentScale})`,
-                    transformOrigin: 'top left',
-                    backgroundColor: activeTemplate.theme.paperTint,
-                    color: textColor,
+                    width: `${Math.round(baseWidth * currentScale)}px`,
+                    height: `${Math.round(baseHeight * currentScale)}px`,
+                    transition: isResizingSidebar ? 'none' : 'width 0.15s ease-out, height 0.15s ease-out',
                   }}
+                  className="relative shrink-0 select-none shadow-2xl"
                 >
+                  <div
+                    ref={certificateRef}
+                    className="absolute top-0 left-0 shadow-2xl overflow-hidden select-none"
+                    style={{
+                      width: `${baseWidth}px`,
+                      height: `${baseHeight}px`,
+                      transform: `scale(${currentScale})`,
+                      transformOrigin: '0 0',
+                      backgroundColor: activeTemplate.theme.paperTint,
+                      color: textColor,
+                    }}
+                  >
                 {/* ─── REAL ACCURATE BORDER RENDERER ─────────── */}
                 <CertificateBorderRenderer theme={activeTemplate.theme} />
 
@@ -2945,92 +2953,92 @@ export default function CertificatePage() {
               </div>
             </div>
           </div>
+        </main>
 
-            {/* Bottom Floating Canvas Zoom & Fit Toolbar */}
-            {/* Floating Zoom & Fit Control Toolbar */}
-            <div
-              className={`sticky bottom-3 mt-auto mx-auto z-30 items-center gap-1.5 sm:gap-2 bg-surface-900/95 backdrop-blur-md border border-surface-700/80 px-2.5 sm:px-3.5 py-1.5 rounded-full shadow-2xl text-xs text-white ${
-                mobileViewMode === 'split' ? 'hidden sm:flex' : 'flex'
-              }`}
+          {/* Bottom Floating Canvas Zoom & Fit Toolbar */}
+          <div
+            className={`absolute bottom-4 left-1/2 -translate-x-1/2 z-30 items-center gap-1.5 sm:gap-2 bg-surface-900/95 backdrop-blur-md border border-surface-700/80 px-2.5 sm:px-3.5 py-1.5 rounded-full shadow-2xl text-xs text-white pointer-events-auto ${
+              mobileViewMode === 'split' ? 'hidden sm:flex' : 'flex'
+            }`}
+          >
+            <button
+              onClick={() => {
+                setZoomMode('custom');
+                setCustomZoom(Math.max(20, Math.round(currentScale * 100) - 10));
+              }}
+              className="p-1 hover:text-amber-400 rounded-full hover:bg-surface-800 transition-colors"
+              title="Zoom Out (-)"
             >
+              <ZoomOut className="w-3.5 h-3.5" />
+            </button>
+
+            <span className="font-mono text-[11px] font-bold text-amber-300 w-11 text-center select-none">
+              {displayZoomPercent}%
+            </span>
+
+            <button
+              onClick={() => {
+                setZoomMode('custom');
+                setCustomZoom(Math.min(200, Math.round(currentScale * 100) + 10));
+              }}
+              className="p-1 hover:text-amber-400 rounded-full hover:bg-surface-800 transition-colors"
+              title="Zoom In (+)"
+            >
+              <ZoomIn className="w-3.5 h-3.5" />
+            </button>
+
+            <div className="w-px h-3.5 bg-surface-700 mx-1" />
+
+            <button
+              onClick={() => setZoomMode('fit')}
+              className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold transition-colors ${
+                zoomMode === 'fit'
+                  ? 'bg-amber-500 text-black shadow-sm'
+                  : 'text-surface-300 hover:text-white hover:bg-surface-800'
+              }`}
+              title="Fit to Screen (Auto Adjusts to screen & sidebar size)"
+            >
+              Fit Screen
+            </button>
+
+            <button
+              onClick={() => {
+                setZoomMode('custom');
+                setCustomZoom(100);
+              }}
+              className={`px-2.5 py-0.5 rounded-full text-[11px] font-mono transition-colors ${
+                zoomMode === 'custom' && Math.round(currentScale * 100) === 100
+                  ? 'bg-amber-500 text-black font-bold'
+                  : 'text-surface-400 hover:text-white hover:bg-surface-800'
+              }`}
+              title="Actual 100% Size"
+            >
+              100%
+            </button>
+
+            <div className="w-px h-3.5 bg-surface-700 mx-1" />
+
+            <span className="text-[10px] text-surface-400 font-medium select-none hidden sm:inline">
+              {isLandscape ? 'Landscape 850×600' : 'Portrait 600×850'}
+            </span>
+          </div>
+
+          {/* On Mobile: Quick Button to Switch to Tools when in Canvas mode */}
+          {mobileViewMode === 'canvas' && (
+            <div className="lg:hidden absolute bottom-3 right-3 z-40">
               <button
-                onClick={() => {
-                  setZoomMode('custom');
-                  setCustomZoom(Math.max(20, Math.round(currentScale * 100) - 10));
-                }}
-                className="p-1 hover:text-amber-400 rounded-full hover:bg-surface-800 transition-colors"
-                title="Zoom Out (-)"
+                onClick={() => setMobileViewMode('tools')}
+                className="bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs px-3.5 py-2 rounded-full shadow-xl flex items-center gap-1.5 active:scale-95 transition-transform"
+                title="Open Studio Tools"
               >
-                <ZoomOut className="w-3.5 h-3.5" />
+                <Sliders className="w-3.5 h-3.5" />
+                <span>Tools</span>
               </button>
-
-              <span className="font-mono text-[11px] font-bold text-amber-300 w-11 text-center select-none">
-                {displayZoomPercent}%
-              </span>
-
-              <button
-                onClick={() => {
-                  setZoomMode('custom');
-                  setCustomZoom(Math.min(200, Math.round(currentScale * 100) + 10));
-                }}
-                className="p-1 hover:text-amber-400 rounded-full hover:bg-surface-800 transition-colors"
-                title="Zoom In (+)"
-              >
-                <ZoomIn className="w-3.5 h-3.5" />
-              </button>
-
-              <div className="w-px h-3.5 bg-surface-700 mx-1" />
-
-              <button
-                onClick={() => setZoomMode('fit')}
-                className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold transition-colors ${
-                  zoomMode === 'fit'
-                    ? 'bg-amber-500 text-black shadow-sm'
-                    : 'text-surface-300 hover:text-white hover:bg-surface-800'
-                }`}
-                title="Fit to Screen (Auto Adjusts to screen & sidebar size)"
-              >
-                Fit Screen
-              </button>
-
-              <button
-                onClick={() => {
-                  setZoomMode('custom');
-                  setCustomZoom(100);
-                }}
-                className={`px-2.5 py-0.5 rounded-full text-[11px] font-mono transition-colors ${
-                  zoomMode === 'custom' && Math.round(currentScale * 100) === 100
-                    ? 'bg-amber-500 text-black font-bold'
-                    : 'text-surface-400 hover:text-white hover:bg-surface-800'
-                }`}
-                title="Actual 100% Size"
-              >
-                100%
-              </button>
-
-              <div className="w-px h-3.5 bg-surface-700 mx-1" />
-
-              <span className="text-[10px] text-surface-400 font-medium select-none hidden sm:inline">
-                {isLandscape ? 'Landscape 850×600' : 'Portrait 600×850'}
-              </span>
             </div>
-
-            {/* On Mobile: Quick Button to Switch to Tools when in Canvas mode */}
-            {mobileViewMode === 'canvas' && (
-              <div className="lg:hidden absolute bottom-3 right-3 z-40">
-                <button
-                  onClick={() => setMobileViewMode('tools')}
-                  className="bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs px-3.5 py-2 rounded-full shadow-xl flex items-center gap-1.5 active:scale-95 transition-transform"
-                  title="Open Studio Tools"
-                >
-                  <Sliders className="w-3.5 h-3.5" />
-                  <span>Tools</span>
-                </button>
-              </div>
-            )}
-          </main>
+          )}
         </div>
-      )}
+      </div>
+    )}
 
       {/* ─── TAB 2: TEMPLATE MARKETPLACE ─────────────────────────────────── */}
       {activeTab === 'marketplace' && (
