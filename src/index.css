@@ -330,6 +330,34 @@
     animation: beam-sweep 9s ease-in-out infinite;
     will-change: transform, opacity;
   }
+
+  @keyframes float-badge-1 {
+    0%, 100% {
+      transform: translateY(0px) rotate(0deg);
+    }
+    50% {
+      transform: translateY(-14px) rotate(2deg);
+    }
+  }
+
+  @keyframes float-badge-2 {
+    0%, 100% {
+      transform: translateY(0px) rotate(0deg);
+    }
+    50% {
+      transform: translateY(16px) rotate(-2deg);
+    }
+  }
+
+  .animate-float-badge-1 {
+    animation: float-badge-1 6s ease-in-out infinite;
+    will-change: transform;
+  }
+
+  .animate-float-badge-2 {
+    animation: float-badge-2 7.5s ease-in-out infinite;
+    will-change: transform;
+  }
 }
 
 @layer utilities {

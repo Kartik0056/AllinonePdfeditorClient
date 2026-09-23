@@ -80,32 +80,7 @@ const features = [
   },
 ];
 
-const BACKGROUND_PARTICLES = [
-  { top: '6%', left: '12%', size: 3, color: '#818cf8', duration: 7, delay: 0, opacity: 0.7 },
-  { top: '12%', left: '76%', size: 2.5, color: '#38bdf8', duration: 9, delay: 1.5, opacity: 0.8 },
-  { top: '20%', left: '30%', size: 3.5, color: '#c084fc', duration: 8, delay: 3, opacity: 0.6 },
-  { top: '26%', left: '88%', size: 2, color: '#f472b6', duration: 11, delay: 0.5, opacity: 0.7 },
-  { top: '34%', left: '6%', size: 2.5, color: '#34d399', duration: 10, delay: 2, opacity: 0.6 },
-  { top: '40%', left: '65%', size: 3, color: '#fbbf24', duration: 7.5, delay: 4, opacity: 0.7 },
-  { top: '48%', left: '20%', size: 2, color: '#818cf8', duration: 9.5, delay: 2.5, opacity: 0.8 },
-  { top: '56%', left: '82%', size: 3, color: '#38bdf8', duration: 8.5, delay: 1, opacity: 0.6 },
-  { top: '64%', left: '45%', size: 2.5, color: '#c084fc', duration: 10.5, delay: 3.5, opacity: 0.7 },
-  { top: '72%', left: '10%', size: 3, color: '#f472b6', duration: 9, delay: 0.8, opacity: 0.6 },
-  { top: '80%', left: '75%', size: 2, color: '#34d399', duration: 11.5, delay: 2.2, opacity: 0.7 },
-  { top: '88%', left: '28%', size: 3.5, color: '#fbbf24', duration: 8, delay: 4.5, opacity: 0.6 },
-  { top: '16%', left: '48%', size: 2, color: '#ffffff', duration: 6.5, delay: 1.2, opacity: 0.8 },
-  { top: '46%', left: '92%', size: 2.5, color: '#818cf8', duration: 10, delay: 3.2, opacity: 0.7 },
-  { top: '74%', left: '58%', size: 2, color: '#38bdf8', duration: 7.8, delay: 0.2, opacity: 0.6 },
-  { top: '92%', left: '85%', size: 3, color: '#c084fc', duration: 9.2, delay: 2.8, opacity: 0.7 },
-  { top: '9%', left: '90%', size: 2, color: '#f472b6', duration: 8.7, delay: 3.8, opacity: 0.6 },
-  { top: '30%', left: '40%', size: 3, color: '#ffffff', duration: 7.2, delay: 1.8, opacity: 0.9 },
-  { top: '60%', left: '5%', size: 2.5, color: '#818cf8', duration: 11, delay: 4.2, opacity: 0.7 },
-  { top: '84%', left: '38%', size: 2, color: '#34d399', duration: 8.4, delay: 0.9, opacity: 0.8 },
-  { top: '4%', left: '38%', size: 2.5, color: '#38bdf8', duration: 9.8, delay: 2.1, opacity: 0.7 },
-  { top: '24%', left: '16%', size: 3, color: '#fbbf24', duration: 7.6, delay: 3.6, opacity: 0.6 },
-  { top: '53%', left: '70%', size: 2, color: '#c084fc', duration: 10.2, delay: 1.4, opacity: 0.7 },
-  { top: '68%', left: '94%', size: 3, color: '#f472b6', duration: 8.9, delay: 2.7, opacity: 0.6 },
-];
+import InteractiveBackground from '../components/InteractiveBackground';
 
 export default function LandingPage() {
   const navigate = useNavigate();
@@ -145,94 +120,12 @@ export default function LandingPage() {
   return (
     <div
       onMouseMove={handleMouseMove}
-      className="min-h-screen bg-surface-950 text-surface-100 flex flex-col font-sans selection:bg-primary-500/30 relative overflow-hidden"
+      className="min-h-screen bg-[#08090d] text-surface-100 flex flex-col font-sans selection:bg-primary-500/30 relative overflow-hidden"
     >
       <Navbar />
 
-      {/* ─── ULTRA-PREMIUM ANIMATED LIVING BACKGROUND ──────────────── */}
-      <div className="fixed inset-0 pointer-events-none -z-10 overflow-hidden">
-        {/* Base Canvas */}
-        <div className="absolute inset-0 bg-surface-950" />
-
-        {/* Top Radiant Beam / Header Glow Flare */}
-        <div className="absolute -top-36 left-1/2 -translate-x-1/2 w-[1100px] h-[400px] bg-gradient-to-b from-primary-500/35 via-purple-600/20 to-transparent blur-[100px] rounded-full pointer-events-none opacity-90" />
-
-        {/* Interactive Mouse Spotlight Glow */}
-        {mousePos.x > -100 && (
-          <div
-            className="absolute inset-0 transition-opacity duration-300 pointer-events-none"
-            style={{
-              background: `radial-gradient(650px circle at ${mousePos.x}px ${mousePos.y}px, rgba(99, 102, 241, 0.18), rgba(168, 85, 247, 0.08) 35%, transparent 75%)`,
-            }}
-          />
-        )}
-
-        {/* Luminous Animated Aurora Orb 1: Electric Indigo / Cobalt */}
-        <div
-          className="absolute -top-16 -left-20 w-[600px] h-[600px] rounded-full blur-[110px] animate-aurora-1 pointer-events-none"
-          style={{
-            background: 'radial-gradient(circle, rgba(99, 102, 241, 0.40) 0%, rgba(79, 70, 229, 0.25) 50%, transparent 75%)',
-          }}
-        />
-
-        {/* Luminous Animated Aurora Orb 2: Cyber Cyan / Emerald */}
-        <div
-          className="absolute top-1/4 -right-28 w-[650px] h-[650px] rounded-full blur-[120px] animate-aurora-2 pointer-events-none"
-          style={{
-            background: 'radial-gradient(circle, rgba(6, 182, 212, 0.35) 0%, rgba(16, 185, 129, 0.20) 50%, transparent 75%)',
-          }}
-        />
-
-        {/* Luminous Animated Aurora Orb 3: Deep Purple / Fuchsia Glow */}
-        <div
-          className="absolute top-1/2 left-1/4 w-[700px] h-[700px] rounded-full blur-[130px] animate-aurora-3 pointer-events-none"
-          style={{
-            background: 'radial-gradient(circle, rgba(168, 85, 247, 0.32) 0%, rgba(236, 72, 153, 0.18) 50%, transparent 75%)',
-          }}
-        />
-
-        {/* Luminous Animated Aurora Orb 4: Warm Gold / Amber Accent */}
-        <div
-          className="absolute bottom-10 right-1/4 w-[550px] h-[550px] rounded-full blur-[110px] animate-aurora-4 pointer-events-none"
-          style={{
-            background: 'radial-gradient(circle, rgba(245, 158, 11, 0.24) 0%, rgba(217, 119, 6, 0.12) 50%, transparent 75%)',
-          }}
-        />
-
-        {/* Cyber Studio Grid with Moving Laser Sweep Beam */}
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff08_1px,transparent_1px),linear-gradient(to_bottom,#ffffff08_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_75%_65%_at_50%_20%,#000_65%,transparent_100%)] pointer-events-none">
-          {/* Animated Sweeping Light Ray */}
-          <div className="absolute inset-x-0 h-48 bg-gradient-to-b from-transparent via-primary-500/15 to-transparent animate-beam-sweep pointer-events-none" />
-        </div>
-
-        {/* Architectural Tech Rings behind Hero Heading */}
-        <div className="absolute top-20 left-1/2 -translate-x-1/2 w-[750px] h-[750px] pointer-events-none flex items-center justify-center">
-          <div className="w-full h-full rounded-full border border-primary-500/15 animate-pulse-ring" />
-          <div className="absolute w-[540px] h-[540px] rounded-full border border-dashed border-purple-500/20 animate-spin-ultra-slow" />
-          <div className="absolute w-[360px] h-[360px] rounded-full border border-cyan-500/15 animate-pulse-ring" style={{ animationDelay: '-4s' }} />
-        </div>
-
-        {/* Floating Twinkling Particles / Starfield */}
-        <div className="absolute inset-0 pointer-events-none">
-          {BACKGROUND_PARTICLES.map((p, idx) => (
-            <span
-              key={idx}
-              className="absolute rounded-full"
-              style={{
-                top: p.top,
-                left: p.left,
-                width: `${p.size}px`,
-                height: `${p.size}px`,
-                backgroundColor: p.color,
-                boxShadow: `0 0 ${p.size * 3}px ${p.color}`,
-                animation: `float-particle ${p.duration}s ease-in-out infinite`,
-                animationDelay: `${p.delay}s`,
-                opacity: p.opacity,
-              }}
-            />
-          ))}
-        </div>
-      </div>
+      {/* ─── ULTRA-PREMIUM INTERACTIVE LIVING BACKGROUND ─────────── */}
+      <InteractiveBackground mousePos={mousePos} />
 
       {/* Hero Section */}
       <section className="pt-12 sm:pt-16 pb-16 px-4 sm:px-6 max-w-6xl mx-auto w-full text-center relative z-10">
@@ -416,10 +309,10 @@ export default function LandingPage() {
       </section>
 
       {/* ─── 3 HUMAN PILLARS ────────────────────────────────────────── */}
-      <section className="py-12 px-4 sm:px-6 max-w-6xl mx-auto w-full border-t border-surface-800/80">
+      <section className="py-12 px-4 sm:px-6 max-w-6xl mx-auto w-full border-t border-surface-800/80 relative z-10">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="p-6 rounded-2xl bg-surface-900/50 border border-surface-800">
-            <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center mb-4">
+          <div className="p-6 rounded-2xl bg-surface-900/60 border border-surface-800/80 backdrop-blur-md hover:border-surface-700 hover:shadow-xl transition-all">
+            <div className="w-10 h-10 rounded-xl bg-blue-500/15 text-blue-400 flex items-center justify-center mb-4 border border-blue-500/20">
               <Type className="w-5 h-5" />
             </div>
             <h3 className="text-base font-bold text-white mb-1.5">Direct In-Place Editing</h3>
@@ -428,8 +321,8 @@ export default function LandingPage() {
             </p>
           </div>
 
-          <div className="p-6 rounded-2xl bg-surface-900/50 border border-surface-800">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center mb-4">
+          <div className="p-6 rounded-2xl bg-surface-900/60 border border-surface-800/80 backdrop-blur-md hover:border-surface-700 hover:shadow-xl transition-all">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center mb-4 border border-emerald-500/20">
               <Shield className="w-5 h-5" />
             </div>
             <h3 className="text-base font-bold text-white mb-1.5">100% Client-Side Privacy</h3>
@@ -438,8 +331,8 @@ export default function LandingPage() {
             </p>
           </div>
 
-          <div className="p-6 rounded-2xl bg-surface-900/50 border border-surface-800">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center mb-4">
+          <div className="p-6 rounded-2xl bg-surface-900/60 border border-surface-800/80 backdrop-blur-md hover:border-surface-700 hover:shadow-xl transition-all">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/15 text-amber-400 flex items-center justify-center mb-4 border border-amber-500/20">
               <Award className="w-5 h-5" />
             </div>
             <h3 className="text-base font-bold text-white mb-1.5">Creative Studio Suite</h3>
@@ -451,7 +344,7 @@ export default function LandingPage() {
       </section>
 
       {/* ─── ALL TOOLS GRID ─────────────────────────────────────────── */}
-      <section className="py-16 px-4 sm:px-6 max-w-6xl mx-auto w-full">
+      <section className="py-16 px-4 sm:px-6 max-w-6xl mx-auto w-full relative z-10">
         <div className="text-center mb-10">
           <h2 className="text-2xl sm:text-3xl font-bold text-white mb-2">Complete Creative & Document Utilities</h2>
           <p className="text-xs sm:text-sm text-surface-400 max-w-lg mx-auto">
@@ -466,11 +359,11 @@ export default function LandingPage() {
               <Link
                 key={feat.title}
                 to={feat.link}
-                className="group p-5 rounded-2xl bg-surface-900/60 border border-surface-800 hover:border-surface-700 transition-all hover:-translate-y-0.5 shadow-md flex flex-col justify-between"
+                className="group p-5 rounded-2xl bg-surface-900/65 border border-surface-800/80 hover:border-primary-500/40 transition-all hover:-translate-y-1 shadow-md hover:shadow-xl hover:shadow-primary-500/10 flex flex-col justify-between backdrop-blur-md"
               >
                 <div>
                   <div className="flex items-center justify-between mb-3">
-                    <div className="w-10 h-10 rounded-xl bg-surface-800 flex items-center justify-center group-hover:bg-primary-500/20 transition-colors">
+                    <div className="w-10 h-10 rounded-xl bg-surface-800/80 border border-surface-700/60 flex items-center justify-center group-hover:bg-primary-500/20 group-hover:border-primary-500/40 transition-colors">
                       <Icon className="w-5 h-5 text-primary-400" />
                     </div>
                     <span className="text-[10px] font-semibold text-surface-400 bg-surface-800/80 px-2 py-0.5 rounded-full border border-surface-700/60">
@@ -497,14 +390,14 @@ export default function LandingPage() {
       </section>
 
       {/* ─── HUMAN FAQ SECTION ──────────────────────────────────────── */}
-      <section className="py-12 px-4 sm:px-6 max-w-4xl mx-auto w-full border-t border-surface-800">
+      <section className="py-12 px-4 sm:px-6 max-w-4xl mx-auto w-full border-t border-surface-800/80 relative z-10">
         <h2 className="text-xl font-bold text-white text-center mb-8 flex items-center justify-center gap-2">
           <HelpCircle className="w-5 h-5 text-primary-400" />
           <span>Frequently Asked Questions</span>
         </h2>
 
         <div className="space-y-4">
-          <div className="p-4 rounded-xl bg-surface-900/50 border border-surface-800">
+          <div className="p-4 rounded-xl bg-surface-900/60 border border-surface-800/80 backdrop-blur-md">
             <h4 className="text-xs font-bold text-white mb-1">
               How does in-place text editing work?
             </h4>
@@ -513,7 +406,7 @@ export default function LandingPage() {
             </p>
           </div>
 
-          <div className="p-4 rounded-xl bg-surface-900/50 border border-surface-800">
+          <div className="p-4 rounded-xl bg-surface-900/60 border border-surface-800/80 backdrop-blur-md">
             <h4 className="text-xs font-bold text-white mb-1">
               Are my files uploaded to your servers?
             </h4>
@@ -522,7 +415,7 @@ export default function LandingPage() {
             </p>
           </div>
 
-          <div className="p-4 rounded-xl bg-surface-900/50 border border-surface-800">
+          <div className="p-4 rounded-xl bg-surface-900/60 border border-surface-800/80 backdrop-blur-md">
             <h4 className="text-xs font-bold text-white mb-1">
               Can I design certificates from scratch or only edit templates?
             </h4>
@@ -534,7 +427,7 @@ export default function LandingPage() {
       </section>
 
       {/* ─── HUMAN FOOTER ──────────────────────────────────────────── */}
-      <footer className="mt-auto border-t border-surface-800 py-8 px-6 bg-surface-950">
+      <footer className="mt-auto border-t border-surface-800/80 py-8 px-6 bg-surface-950/80 backdrop-blur-xl relative z-10">
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-surface-400">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-primary-500 to-purple-600 flex items-center justify-center text-white font-bold text-xs">
