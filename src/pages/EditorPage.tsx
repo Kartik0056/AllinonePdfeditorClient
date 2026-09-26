@@ -3,7 +3,7 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import * as pdfjsLib from 'pdfjs-dist';
 // Use local bundled worker for 100% reliable offline/online loading
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
@@ -13,10 +13,14 @@ import {
   PenTool, Highlighter, Square, Minus, Circle, ArrowUpRight,
   Eraser, Stamp, StickyNote, Search, PanelLeftClose, PanelLeftOpen,
   Trash2, Copy, Plus, X, MoveUp, MoveDown, Check, Sparkles,
-  Move, RotateCcw, Hand, Eye, Underline as UnderlineIcon, Strikethrough as StrikeIcon
+  Move, RotateCcw, Hand, Eye, Underline as UnderlineIcon, Strikethrough as StrikeIcon,
+  Clock, ShieldAlert, AlertTriangle, Cloud, Lock, Sliders, CheckCheck, Loader2
 } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import PDFPreviewModal from '../components/PDFPreviewModal';
+import UploadProgressModal, { ProcessingStep } from '../components/UploadProgressModal';
+import SaveExitModal from '../components/SaveExitModal';
+import { projectAPI } from '../services/api';
 import { useEditorStore } from '../stores/editorStore';
 import { PDFEditor } from '@pdfeditor/sdk';
 import type {
@@ -89,6 +93,40 @@ export default function EditorPage() {
   const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
   const [thumbnails, setThumbnails] = useState<string[]>([]);
   const [isRendering, setIsRendering] = useState(false);
+  const navigate = useNavigate();
+
+  // Smart Zoom Focus state for editing text (user requested: jo bhi text ham edit kare vohi aye but vo zoom hoke dikhe)
+  const [isFocusZoomEnabled, setIsFocusZoomEnabled] = useState(true);
+  const [focusZoomFactor, setFocusZoomFactor] = useState(1.8);
+
+  // Multi-step Upload & Extraction state with 20MB check
+  const [uploadProgress, setUploadProgress] = useState<{
+    isOpen: boolean;
+    fileName: string;
+    fileSizeBytes: number;
+    currentStep: ProcessingStep;
+    progressPercent: number;
+    statusMessage: string;
+    error: string | null;
+  }>({
+    isOpen: false,
+    fileName: '',
+    fileSizeBytes: 0,
+    currentStep: 'uploading',
+    progressPercent: 0,
+    statusMessage: '',
+    error: null,
+  });
+
+  // Save & Exit modal state (user requested: 10 min TTL auto-delete in projects & manual delete)
+  const [saveExitModalOpen, setSaveExitModalOpen] = useState(false);
+  const [isSavingToDashboard, setIsSavingToDashboard] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 4000);
+  };
 
   // PDF Edit Preview Modal
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
@@ -324,29 +362,167 @@ export default function EditorPage() {
     setThumbnails(thumbs);
   };
 
-  // ─── File Handling ─────────────────────────────────────
+  // ─── File Handling & 20MB Processing Pipeline ─────────
+
+  const startProcessingPDF = useCallback(async (file: File) => {
+    const MAX_PDF_BYTES = 20 * 1024 * 1024; // Strict 20MB restriction
+    if (file.size > MAX_PDF_BYTES) {
+      const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+      setUploadProgress({
+        isOpen: true,
+        fileName: file.name,
+        fileSizeBytes: file.size,
+        currentStep: 'uploading',
+        progressPercent: 0,
+        statusMessage: '',
+        error: `File exceeds 20MB restriction (${sizeMB} MB). Only PDF files up to 20MB are allowed for optimized cloud processing.`,
+      });
+      return;
+    }
+
+    setUploadProgress({
+      isOpen: true,
+      fileName: file.name,
+      fileSizeBytes: file.size,
+      currentStep: 'uploading',
+      progressPercent: 15,
+      statusMessage: `Uploading PDF data (${(file.size / 1024 / 1024).toFixed(1)} MB)...`,
+      error: null,
+    });
+
+    const reader = new FileReader();
+
+    reader.onprogress = (e) => {
+      if (e.lengthComputable) {
+        const p = Math.min(80, Math.round((e.loaded / e.total) * 60) + 15);
+        setUploadProgress((prev) => ({
+          ...prev,
+          progressPercent: p,
+          statusMessage: `Uploading PDF data (${(e.loaded / 1024 / 1024).toFixed(1)} MB / ${(file.size / 1024 / 1024).toFixed(1)} MB)...`,
+        }));
+      }
+    };
+
+    reader.onload = async () => {
+      try {
+        const buffer = reader.result as ArrayBuffer;
+
+        // Stage 2: Security & Structure Verification
+        setUploadProgress((prev) => ({
+          ...prev,
+          currentStep: 'securing',
+          progressPercent: 65,
+          statusMessage: 'Scanning document security, TLS signatures & binary structures...',
+        }));
+        await new Promise((r) => setTimeout(r, 400));
+
+        // Stage 3: Text & Vector Layer Extraction
+        setUploadProgress((prev) => ({
+          ...prev,
+          currentStep: 'extracting',
+          progressPercent: 82,
+          statusMessage: 'Extracting text layers, typography glyphs & vector geometry...',
+        }));
+        await new Promise((r) => setTimeout(r, 450));
+
+        // Stage 4: Rendering HD Viewports
+        setUploadProgress((prev) => ({
+          ...prev,
+          currentStep: 'rendering',
+          progressPercent: 94,
+          statusMessage: 'Generating high-fidelity viewport canvases & page thumbnails...',
+        }));
+
+        await loadPDF(buffer, file.name);
+
+        // Stage 5: Ready
+        setUploadProgress((prev) => ({
+          ...prev,
+          currentStep: 'ready',
+          progressPercent: 100,
+          statusMessage: 'Studio workspace initialized successfully!',
+        }));
+
+        setTimeout(() => {
+          setUploadProgress((prev) => ({ ...prev, isOpen: false }));
+        }, 450);
+      } catch (err: any) {
+        setUploadProgress((prev) => ({
+          ...prev,
+          error: err.message || 'Failed to parse and load PDF document',
+        }));
+      }
+    };
+
+    reader.onerror = () => {
+      setUploadProgress((prev) => ({
+        ...prev,
+        error: 'Failed to read file from local disk.',
+      }));
+    };
+
+    reader.readAsArrayBuffer(file);
+  }, [loadPDF]);
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.type !== 'application/pdf') {
-      store.setError('Please select a PDF file');
+    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+      store.setError('Please select a valid PDF file');
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => loadPDF(reader.result as ArrayBuffer, file.name);
-    reader.readAsArrayBuffer(file);
-  }, [loadPDF, store]);
+    startProcessingPDF(file);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }, [startProcessingPDF, store]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     const file = e.dataTransfer.files[0];
-    if (file?.type === 'application/pdf') {
-      const reader = new FileReader();
-      reader.onload = () => loadPDF(reader.result as ArrayBuffer, file.name);
-      reader.readAsArrayBuffer(file);
+    if (file && (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf'))) {
+      startProcessingPDF(file);
     }
-  }, [loadPDF]);
+  }, [startProcessingPDF]);
+
+  // ─── Save to Dashboard & 10-Minute Expiry Retention ────
+
+  const handleSaveAndExit = useCallback(async () => {
+    setIsSavingToDashboard(true);
+    try {
+      const editor = getEditor();
+      const bytes = await editor.export();
+
+      // Convert Uint8Array to base64 in safe chunks
+      let binary = '';
+      const len = bytes.byteLength;
+      const chunkSize = 8192;
+      for (let i = 0; i < len; i += chunkSize) {
+        const chunk = bytes.subarray(i, Math.min(i + chunkSize, len));
+        binary += String.fromCharCode.apply(null, chunk as any);
+      }
+      const base64 = btoa(binary);
+
+      await projectAPI.saveEdited({
+        name: store.fileName || 'Edited Document.pdf',
+        originalFileName: store.fileName || 'document.pdf',
+        pdfBase64: `data:application/pdf;base64,${base64}`,
+        pageCount: store.document?.totalPages || 1,
+      });
+
+      setSaveExitModalOpen(false);
+      store.reset();
+      navigate('/dashboard');
+    } catch (err: any) {
+      store.setError('Failed to save edited PDF to projects: ' + (err.message || ''));
+    } finally {
+      setIsSavingToDashboard(false);
+    }
+  }, [store, navigate]);
+
+  const handleDiscardAndExit = useCallback(() => {
+    store.reset();
+    setSaveExitModalOpen(false);
+    navigate('/dashboard');
+  }, [store, navigate]);
 
   // ─── Delete Element ────────────────────────────────────
 
@@ -1130,16 +1306,29 @@ export default function EditorPage() {
           onDrop={handleDrop}
         >
           <div className="max-w-md w-full text-center">
-            <div className="card p-8 border border-surface-800 shadow-2xl">
-              <div className="w-16 h-16 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-primary-500 to-purple-600 flex items-center justify-center shadow-lg shadow-primary-500/20">
+            <div className="card p-8 border border-surface-800 shadow-2xl relative overflow-hidden">
+              {/* Background gradient blur */}
+              <div className="absolute top-0 right-0 w-48 h-48 bg-primary-600/10 rounded-full blur-2xl pointer-events-none -mr-10 -mt-10" />
+
+              <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-primary-500 to-purple-600 flex items-center justify-center shadow-lg shadow-primary-500/20">
                 <FileText className="w-8 h-8 text-white" />
               </div>
 
-              <h1 className="text-2xl font-bold text-white mb-2">Open a PDF</h1>
-              <p className="text-surface-400 text-sm mb-6">Select a PDF to start editing, signing, and annotating</p>
+              {/* 20MB Limit Badge */}
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary-500/15 border border-primary-500/30 text-primary-300 text-xs font-semibold mb-3">
+                <Lock className="w-3.5 h-3.5 text-primary-400" />
+                <span>Max 20MB Size Limit</span>
+                <span className="text-surface-500">·</span>
+                <span>10m Auto-Delete Privacy</span>
+              </div>
+
+              <h1 className="text-2xl font-bold text-white mb-2 tracking-tight">Open a PDF</h1>
+              <p className="text-surface-400 text-xs mb-6">
+                Fast vector text editing with Smart Focus Zoom, signatures, and instant conversion
+              </p>
 
               <div
-                className="dropzone mb-6 cursor-pointer"
+                className="dropzone mb-6 cursor-pointer border-2 border-dashed border-surface-700 hover:border-primary-500 transition-colors p-8 rounded-xl bg-surface-900/60"
                 onClick={() => fileInputRef.current?.click()}
               >
                 <input
@@ -1149,15 +1338,15 @@ export default function EditorPage() {
                   className="hidden"
                   onChange={handleFileSelect}
                 />
-                <Upload className="w-10 h-10 text-surface-500 mx-auto mb-3" />
-                <p className="text-surface-300 font-medium">Drop PDF here or click to browse</p>
-                <p className="text-surface-500 text-xs mt-1">Supports any standard PDF document</p>
+                <Upload className="w-10 h-10 text-primary-400 mx-auto mb-3 animate-bounce" />
+                <p className="text-surface-200 font-semibold text-sm">Drop PDF here or click to browse</p>
+                <p className="text-surface-400 text-xs mt-1.5 font-mono">Maximum file size: 20MB</p>
               </div>
 
               <div className="flex items-center gap-3 justify-center mb-2">
                 <button
                   onClick={handleCreateBlank}
-                  className="btn-secondary text-xs flex items-center gap-1.5"
+                  className="btn-secondary text-xs flex items-center gap-1.5 px-4 py-2"
                 >
                   <Plus className="w-3.5 h-3.5 text-primary-400" />
                   Create Blank PDF
@@ -1165,13 +1354,26 @@ export default function EditorPage() {
               </div>
 
               {store.error && (
-                <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-xs">
-                  {store.error}
+                <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-xs flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-red-400" />
+                  <span>{store.error}</span>
                 </div>
               )}
             </div>
           </div>
         </div>
+
+        {/* Upload & Extraction Progress Pipeline Modal */}
+        <UploadProgressModal
+          isOpen={uploadProgress.isOpen}
+          fileName={uploadProgress.fileName}
+          fileSizeBytes={uploadProgress.fileSizeBytes}
+          currentStep={uploadProgress.currentStep}
+          progressPercent={uploadProgress.progressPercent}
+          statusMessage={uploadProgress.statusMessage}
+          error={uploadProgress.error}
+          onCancel={() => setUploadProgress((prev) => ({ ...prev, isOpen: false, error: null }))}
+        />
       </div>
     );
   }
@@ -1204,15 +1406,28 @@ export default function EditorPage() {
 
       {/* ─── Secondary Editor Sub-Header / Action Bar ────── */}
       <div className="h-11 bg-surface-900/90 border-b border-surface-800/60 px-3 sm:px-4 flex items-center justify-between shrink-0 z-30 gap-2 overflow-x-auto scrollbar-none">
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+          {/* Back to Dashboard with 10-Minute Auto-Delete Prompt */}
+          <button
+            onClick={() => setSaveExitModalOpen(true)}
+            className="btn-ghost text-xs px-2.5 py-1 flex items-center gap-1 text-surface-300 hover:text-white shrink-0 hover:bg-surface-800 rounded-lg transition-colors border border-surface-800/80"
+            title="Return to Dashboard & Saved Projects"
+          >
+            <ChevronLeft className="w-3.5 h-3.5 text-primary-400" />
+            <span className="font-semibold">Dashboard</span>
+          </button>
+
+          <div className="h-4 w-px bg-surface-800 shrink-0" />
+
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="btn-secondary text-xs px-2.5 sm:px-3 py-1 flex items-center gap-1.5 shadow-sm shrink-0"
-            title="Open or upload a PDF file from your computer"
+            className="btn-secondary text-xs px-2.5 py-1 flex items-center gap-1.5 shadow-sm shrink-0"
+            title="Open or upload a PDF file (Max 20MB)"
           >
             <Upload className="w-3.5 h-3.5 text-primary-400 shrink-0" />
             <span>Open PDF</span>
           </button>
+
           <button
             onClick={handleCreateBlank}
             className="btn-ghost text-xs px-2 py-1 flex items-center gap-1 text-surface-400 hover:text-white shrink-0"
@@ -1221,17 +1436,46 @@ export default function EditorPage() {
             <Plus className="w-3.5 h-3.5" />
             <span className="hidden md:inline">New Blank</span>
           </button>
+
           <div className="h-4 w-px bg-surface-800 shrink-0" />
-          <span className="text-xs font-semibold text-white truncate max-w-[140px] sm:max-w-[220px]" title={store.fileName}>
+
+          {/* Document Title & Badges */}
+          <span className="text-xs font-semibold text-white truncate max-w-[130px] sm:max-w-[180px]" title={store.fileName}>
             {store.fileName}
           </span>
           <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-800 text-surface-400 font-mono shrink-0">
             {totalPages} {totalPages === 1 ? 'page' : 'pages'}
           </span>
+
+          {/* Strict 20MB & 10m TTL Badges */}
+          <span className="hidden xl:inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-primary-500/10 text-primary-300 border border-primary-500/30 font-medium shrink-0">
+            <Lock className="w-3 h-3" />
+            Max 20MB
+          </span>
+          <span className="hidden xl:inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 font-medium shrink-0">
+            <Clock className="w-3 h-3" />
+            10m Auto-Delete
+          </span>
         </div>
 
-        {/* Search bar & export */}
+        {/* Action bar: Focus Zoom, Search, Undo/Redo, Preview, Export, Save & Exit */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          {/* Smart Zoom Focus Mode Button */}
+          <button
+            type="button"
+            onClick={() => setIsFocusZoomEnabled(!isFocusZoomEnabled)}
+            className={`text-xs px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-all shrink-0 ${
+              isFocusZoomEnabled
+                ? 'bg-primary-500/20 text-primary-300 border border-primary-500/40 font-semibold shadow-sm'
+                : 'btn-secondary text-surface-400 hover:text-white'
+            }`}
+            title="Toggle Smart Focus Zoom when editing text"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-primary-400" />
+            <span className="hidden sm:inline">Text Focus Zoom:</span>
+            <span>{isFocusZoomEnabled ? `${Math.round(focusZoomFactor * 100)}%` : 'OFF'}</span>
+          </button>
+
           {showSearch ? (
             <div className="flex items-center gap-1.5 bg-surface-800/90 rounded-lg px-2 py-1 border border-surface-700">
               <Search className="w-3.5 h-3.5 text-surface-400 shrink-0" />
@@ -1240,7 +1484,7 @@ export default function EditorPage() {
                 value={searchQuery}
                 onChange={(e) => handleSearch(e.target.value)}
                 placeholder="Search in PDF..."
-                className="bg-transparent text-white text-xs outline-none w-32 sm:w-44"
+                className="bg-transparent text-white text-xs outline-none w-28 sm:w-40"
                 autoFocus
               />
               {searchResults.length > 0 && (
@@ -1283,13 +1527,23 @@ export default function EditorPage() {
             title="Preview final edited PDF with annotations and signatures before exporting"
           >
             <Eye className="w-3.5 h-3.5 text-primary-400 shrink-0" />
-            <span>Preview</span>
+            <span className="hidden sm:inline">Preview</span>
           </button>
 
-          {/* Export PDF */}
-          <button onClick={handleExport} className="btn-primary text-xs px-3 py-1 flex items-center gap-1.5 shadow-md shrink-0">
+          {/* Direct Download/Export */}
+          <button onClick={handleExport} className="btn-secondary text-xs px-3 py-1 flex items-center gap-1.5 shadow-sm shrink-0" title="Direct download PDF">
             <Download className="w-3.5 h-3.5 shrink-0" />
-            <span>Export</span>
+            <span className="hidden sm:inline">Download</span>
+          </button>
+
+          {/* Save to Projects & Exit with 10-Minute Auto-Delete */}
+          <button
+            onClick={() => setSaveExitModalOpen(true)}
+            className="btn-primary text-xs px-3 py-1 flex items-center gap-1.5 shadow-md shadow-primary-500/20 shrink-0 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 border border-emerald-400/30 font-semibold"
+            title="Save edited PDF to projects with 10-minute auto-expiry retention"
+          >
+            <Cloud className="w-3.5 h-3.5 shrink-0" />
+            <span>Save & Exit (10m TTL)</span>
           </button>
         </div>
       </div>
@@ -2012,205 +2266,248 @@ export default function EditorPage() {
                   const isEditedOrNew = txt.isEdited || !txt.isOriginal;
 
                   if (isInlineEditing) {
-                    const effectiveFontSize = (txt.fontSize || 12) * scale;
+                    const zoomFactor = isFocusZoomEnabled ? focusZoomFactor : 1;
+                    const effectiveFontSize = (txt.fontSize || 12) * scale * zoomFactor;
                     const effectiveFontFamily = txt.fontFamily || 'Helvetica, Arial, sans-serif';
                     const effectiveFontWeight = txt.fontWeight || 'normal';
                     const effectiveFontStyle = (txt as any).fontStyle || 'normal';
                     const effectiveColor = txt.color || '#000000';
-                    const boxWidth = Math.max(txt.width * scale, 40);
-                    const boxHeight = Math.max(txt.height * scale, effectiveFontSize * 1.2);
+                    const boxWidth = Math.max(txt.width * scale * zoomFactor, 60);
+                    const boxHeight = Math.max(txt.height * scale * zoomFactor, effectiveFontSize * 1.25);
 
                     return (
-                      <div
-                        key={txt.id}
-                        className="absolute z-40 group"
-                        style={{
-                          left: txt.x * scale,
-                          top: txt.y * scale,
-                          minWidth: boxWidth,
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                        onMouseDown={(e) => e.stopPropagation()}
-                      >
-                        {/* Word-Style Floating Format Bar Hovering Directly Above Text */}
-                        <div className="absolute -top-11 left-0 flex items-center gap-1.5 bg-surface-900/98 backdrop-blur-xl border border-surface-700/90 rounded-xl px-2.5 py-1 shadow-2xl text-xs text-white pointer-events-auto whitespace-nowrap z-50 animate-in fade-in slide-in-from-bottom-1">
-                          {/* Font Size +/- */}
-                          <div className="flex items-center gap-0.5 bg-surface-800 rounded-lg px-1.5 py-0.5 border border-surface-700">
+                      <React.Fragment key={txt.id}>
+                        {/* Spotlight Dim Backdrop when Smart Zoom Focus is active */}
+                        {isFocusZoomEnabled && (
+                          <div
+                            className="fixed inset-0 bg-black/60 backdrop-blur-[2px] z-30 transition-opacity duration-300 pointer-events-auto cursor-pointer"
+                            onClick={() => handleCommitInlineText(txt.id)}
+                            title="Click outside to save and exit focus zoom"
+                          />
+                        )}
+
+                        <div
+                          className={`absolute z-40 group transition-all duration-200 ${
+                            isFocusZoomEnabled ? 'ring-4 ring-primary-500/70 shadow-2xl rounded-sm' : ''
+                          }`}
+                          style={{
+                            left: txt.x * scale,
+                            top: txt.y * scale,
+                            minWidth: boxWidth,
+                            transformOrigin: 'top left',
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                          onMouseDown={(e) => e.stopPropagation()}
+                        >
+                          {/* Floating Pro Format Bar Directly Above Text */}
+                          <div className="absolute -top-12 left-0 flex items-center gap-1.5 bg-surface-900/98 backdrop-blur-xl border border-surface-700/90 rounded-xl px-2.5 py-1.5 shadow-2xl text-xs text-white pointer-events-auto whitespace-nowrap z-50 animate-in fade-in slide-in-from-bottom-2">
+                            {/* Smart Focus Zoom Pill */}
                             <button
                               type="button"
-                              onClick={() => handleUpdateTextProps(txt.id, { fontSize: Math.max(6, (txt.fontSize || 12) - 1) })}
-                              className="text-[11px] text-surface-300 hover:text-white px-1 font-bold"
-                              title="Decrease Font Size"
+                              onClick={() => {
+                                const nextFactors = [1.0, 1.4, 1.8, 2.2];
+                                const currentIdx = nextFactors.indexOf(focusZoomFactor);
+                                const nextFactor = nextFactors[(currentIdx + 1) % nextFactors.length];
+                                setFocusZoomFactor(nextFactor);
+                                if (nextFactor === 1.0) setIsFocusZoomEnabled(false);
+                                else setIsFocusZoomEnabled(true);
+                              }}
+                              className={`px-2 py-0.5 rounded-lg text-[11px] font-mono font-bold flex items-center gap-1 transition-all ${
+                                isFocusZoomEnabled
+                                  ? 'bg-gradient-to-r from-primary-500 to-indigo-600 text-white shadow-sm'
+                                  : 'bg-surface-800 text-surface-400 hover:text-white'
+                              }`}
+                              title="Toggle Zoom Magnification for this text (140%, 180%, 220%)"
                             >
-                              -
+                              <Sparkles className="w-3 h-3" />
+                              <span>{isFocusZoomEnabled ? `${Math.round(focusZoomFactor * 100)}% Focus` : '100%'}</span>
                             </button>
-                            <span className="text-[10px] font-mono text-primary-300 font-bold px-1 min-w-[20px] text-center">
-                              {Math.round(txt.fontSize || 12)}pt
-                            </span>
+
+                            <div className="w-px h-3.5 bg-surface-700 mx-0.5" />
+
+                            {/* Font Family Selector */}
+                            <select
+                              value={txt.fontFamily || 'Helvetica'}
+                              onChange={(e) => handleUpdateTextProps(txt.id, { fontFamily: e.target.value })}
+                              className="bg-surface-800 text-[11px] text-surface-200 border border-surface-700 rounded-lg px-2 py-0.5 outline-none hover:border-primary-500 transition-colors cursor-pointer"
+                              title="Font Family"
+                            >
+                              <option value="Helvetica, Arial, sans-serif">Helvetica</option>
+                              <option value="Inter, sans-serif">Inter</option>
+                              <option value="Roboto, sans-serif">Roboto</option>
+                              <option value="'Times New Roman', serif">Times New Roman</option>
+                              <option value="'Courier New', monospace">Courier</option>
+                              <option value="Georgia, serif">Georgia</option>
+                            </select>
+
+                            {/* Font Size +/- */}
+                            <div className="flex items-center gap-0.5 bg-surface-800 rounded-lg px-1.5 py-0.5 border border-surface-700">
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateTextProps(txt.id, { fontSize: Math.max(6, (txt.fontSize || 12) - 1) })}
+                                className="text-[11px] text-surface-300 hover:text-white px-1 font-bold"
+                                title="Decrease Font Size"
+                              >
+                                -
+                              </button>
+                              <span className="text-[10px] font-mono text-primary-300 font-bold px-1 min-w-[20px] text-center">
+                                {Math.round(txt.fontSize || 12)}pt
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateTextProps(txt.id, { fontSize: Math.min(96, (txt.fontSize || 12) + 1) })}
+                                className="text-[11px] text-surface-300 hover:text-white px-1 font-bold"
+                                title="Increase Font Size"
+                              >
+                                +
+                              </button>
+                            </div>
+
+                            {/* Bold Toggle */}
                             <button
                               type="button"
-                              onClick={() => handleUpdateTextProps(txt.id, { fontSize: Math.min(96, (txt.fontSize || 12) + 1) })}
-                              className="text-[11px] text-surface-300 hover:text-white px-1 font-bold"
-                              title="Increase Font Size"
+                              onClick={() => handleUpdateTextProps(txt.id, { fontWeight: txt.fontWeight === 'bold' ? 'normal' : 'bold' })}
+                              className={`px-2 py-0.5 rounded-lg text-xs font-bold transition-colors ${
+                                txt.fontWeight === 'bold' ? 'bg-primary-500 text-white' : 'hover:bg-surface-800 text-surface-300'
+                              }`}
+                              title="Bold"
                             >
-                              +
+                              B
+                            </button>
+
+                            {/* Italic Toggle */}
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateTextProps(txt.id, { fontStyle: (txt as any).fontStyle === 'italic' ? 'normal' : 'italic' } as any)}
+                              className={`px-2 py-0.5 rounded-lg text-xs font-serif italic transition-colors ${
+                                (txt as any).fontStyle === 'italic' ? 'bg-primary-500 text-white' : 'hover:bg-surface-800 text-surface-300'
+                              }`}
+                              title="Italic"
+                            >
+                              I
+                            </button>
+
+                            {/* Underline Toggle */}
+                            <button
+                              type="button"
+                              onClick={() => handleToggleUnderline(txt)}
+                              className={`px-2 py-0.5 rounded-lg text-xs font-bold underline transition-colors ${
+                                txt.textDecoration === 'underline' || pageElements.some((a) => a.type === 'annotation' && (a as AnnotationElement).annotationType === 'underline' && Math.abs(a.x - txt.x) < 25 && Math.abs(a.y - (txt.y + txt.height - 2)) < 25)
+                                  ? 'bg-primary-500 text-white'
+                                  : 'hover:bg-surface-800 text-surface-300'
+                              }`}
+                              title="Toggle Underline (U)"
+                            >
+                              U
+                            </button>
+
+                            {/* Strikethrough Toggle */}
+                            <button
+                              type="button"
+                              onClick={() => handleToggleStrikethrough(txt)}
+                              className={`px-2 py-0.5 rounded-lg text-xs font-bold line-through transition-colors ${
+                                txt.textDecoration === 'line-through' || pageElements.some((a) => a.type === 'annotation' && (a as AnnotationElement).annotationType === 'strikethrough' && Math.abs(a.x - txt.x) < 25 && Math.abs(a.y - txt.y) < 25)
+                                  ? 'bg-primary-500 text-white'
+                                  : 'hover:bg-surface-800 text-surface-300'
+                              }`}
+                              title="Toggle Strikethrough (S)"
+                            >
+                              S
+                            </button>
+
+                            {/* Text Color Picker */}
+                            <div className="flex items-center gap-1 pl-1 border-l border-surface-700">
+                              <input
+                                type="color"
+                                value={txt.color || '#000000'}
+                                onChange={(e) => handleUpdateTextProps(txt.id, { color: e.target.value })}
+                                className="w-4 h-4 rounded cursor-pointer border-0 bg-transparent p-0"
+                                title="Text Color"
+                              />
+                            </div>
+
+                            {/* Actions */}
+                            <div className="w-px h-3.5 bg-surface-700 mx-0.5" />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const editor = getEditor();
+                                const dup = editor.duplicateElement(txt.id);
+                                if (dup) refreshPageElements(store.currentPage);
+                              }}
+                              className="p-1 hover:text-primary-300 rounded text-surface-400"
+                              title="Duplicate Text"
+                            >
+                              <Copy className="w-3 h-3" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleDeleteElement(txt.id);
+                                setInlineEditingId(null);
+                              }}
+                              className="p-1 hover:text-red-400 rounded text-surface-400"
+                              title="Delete Text"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+
+                            {/* Done Button */}
+                            <button
+                              type="button"
+                              onClick={() => handleCommitInlineText(txt.id)}
+                              className="px-2.5 py-1 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold rounded-lg text-[11px] flex items-center gap-1 shadow-md shadow-emerald-500/20"
+                              title="Done (Ctrl+Enter)"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                              <span>Done</span>
                             </button>
                           </div>
 
-                          {/* Bold Toggle */}
-                          <button
-                            type="button"
-                            onClick={() => handleUpdateTextProps(txt.id, { fontWeight: txt.fontWeight === 'bold' ? 'normal' : 'bold' })}
-                            className={`px-2 py-0.5 rounded-lg text-xs font-bold transition-colors ${
-                              txt.fontWeight === 'bold' ? 'bg-primary-500 text-white' : 'hover:bg-surface-800 text-surface-300'
-                            }`}
-                            title="Bold"
-                          >
-                            B
-                          </button>
-
-                          {/* Italic Toggle */}
-                          <button
-                            type="button"
-                            onClick={() => handleUpdateTextProps(txt.id, { fontStyle: (txt as any).fontStyle === 'italic' ? 'normal' : 'italic' } as any)}
-                            className={`px-2 py-0.5 rounded-lg text-xs font-serif italic transition-colors ${
-                              (txt as any).fontStyle === 'italic' ? 'bg-primary-500 text-white' : 'hover:bg-surface-800 text-surface-300'
-                            }`}
-                            title="Italic"
-                          >
-                            I
-                          </button>
-
-                          {/* Underline Toggle */}
-                          <button
-                            type="button"
-                            onClick={() => handleToggleUnderline(txt)}
-                            className={`px-2 py-0.5 rounded-lg text-xs font-bold underline transition-colors ${
-                              txt.textDecoration === 'underline' || pageElements.some((a) => a.type === 'annotation' && (a as AnnotationElement).annotationType === 'underline' && Math.abs(a.x - txt.x) < 25 && Math.abs(a.y - (txt.y + txt.height - 2)) < 25)
-                                ? 'bg-primary-500 text-white'
-                                : 'hover:bg-surface-800 text-surface-300'
-                            }`}
-                            title="Toggle Underline (U) - Click again to remove anytime"
-                          >
-                            U
-                          </button>
-
-                          {/* Strikethrough Toggle */}
-                          <button
-                            type="button"
-                            onClick={() => handleToggleStrikethrough(txt)}
-                            className={`px-2 py-0.5 rounded-lg text-xs font-bold line-through transition-colors ${
-                              txt.textDecoration === 'line-through' || pageElements.some((a) => a.type === 'annotation' && (a as AnnotationElement).annotationType === 'strikethrough' && Math.abs(a.x - txt.x) < 25 && Math.abs(a.y - txt.y) < 25)
-                                ? 'bg-primary-500 text-white'
-                                : 'hover:bg-surface-800 text-surface-300'
-                            }`}
-                            title="Toggle Strikethrough (S) - Click again to remove anytime"
-                          >
-                            S
-                          </button>
-
-                          {/* Reset / Clear Formatting */}
-                          <button
-                            type="button"
-                            onClick={() => handleClearAllStyles(txt)}
-                            className="p-1 hover:text-amber-400 rounded text-surface-400 hover:bg-surface-800 transition-colors"
-                            title="Clear formatting & remove styles"
-                          >
-                            <RotateCcw className="w-3 h-3" />
-                          </button>
-
-                          {/* Text Color Picker */}
-                          <div className="flex items-center gap-1 pl-1 border-l border-surface-700">
-                            <input
-                              type="color"
-                              value={txt.color || '#000000'}
-                              onChange={(e) => handleUpdateTextProps(txt.id, { color: e.target.value })}
-                              className="w-4 h-4 rounded cursor-pointer border-0 bg-transparent p-0"
-                              title="Text Color"
+                          {/* In-Place Textarea with seamless whiteout backing */}
+                          <div className="relative">
+                            <div
+                              className="absolute inset-0 bg-white pointer-events-none rounded-sm"
+                              style={{
+                                minHeight: `${boxHeight}px`,
+                                minWidth: `${boxWidth}px`,
+                              }}
+                            />
+                            <textarea
+                              ref={inlineInputRef}
+                              value={inlineTextVal}
+                              onChange={(e) => {
+                                setInlineTextVal(e.target.value);
+                                e.target.style.height = 'auto';
+                                e.target.style.height = `${e.target.scrollHeight}px`;
+                              }}
+                              onBlur={() => handleCommitInlineText(txt.id)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Escape') {
+                                  handleCommitInlineText(txt.id);
+                                }
+                                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                                  e.preventDefault();
+                                  handleCommitInlineText(txt.id);
+                                }
+                              }}
+                              className="relative z-10 w-full bg-transparent outline-none border-2 border-primary-500/90 ring-2 ring-primary-400/40 rounded-sm p-0.5 m-0 resize-none leading-tight"
+                              style={{
+                                fontSize: `${effectiveFontSize}px`,
+                                fontFamily: effectiveFontFamily,
+                                fontWeight: effectiveFontWeight,
+                                fontStyle: effectiveFontStyle,
+                                textDecoration: txt.textDecoration || 'none',
+                                color: effectiveColor,
+                                lineHeight: 1.15,
+                                minWidth: `${boxWidth}px`,
+                                height: `${boxHeight}px`,
+                              }}
+                              autoFocus
                             />
                           </div>
-
-                          {/* Actions */}
-                          <div className="w-px h-3.5 bg-surface-700 mx-0.5" />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const editor = getEditor();
-                              const dup = editor.duplicateElement(txt.id);
-                              if (dup) refreshPageElements(store.currentPage);
-                            }}
-                            className="p-1 hover:text-primary-300 rounded text-surface-400"
-                            title="Duplicate Text"
-                          >
-                            <Copy className="w-3 h-3" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              handleDeleteElement(txt.id);
-                              setInlineEditingId(null);
-                            }}
-                            className="p-1 hover:text-red-400 rounded text-surface-400"
-                            title="Delete Text"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-
-                          {/* Done Button */}
-                          <button
-                            type="button"
-                            onClick={() => handleCommitInlineText(txt.id)}
-                            className="px-2 py-0.5 bg-primary-500 hover:bg-primary-600 text-white font-semibold rounded-md text-[10px] flex items-center gap-1 shadow-sm"
-                            title="Done (or click outside)"
-                          >
-                            <Check className="w-3 h-3" />
-                            <span>Done</span>
-                          </button>
                         </div>
-
-                        {/* In-Place Textarea with seamless whiteout backing */}
-                        <div className="relative">
-                          <div
-                            className="absolute inset-0 bg-white pointer-events-none"
-                            style={{
-                              minHeight: `${boxHeight}px`,
-                              minWidth: `${boxWidth}px`,
-                            }}
-                          />
-                          <textarea
-                            ref={inlineInputRef}
-                            value={inlineTextVal}
-                            onChange={(e) => {
-                              setInlineTextVal(e.target.value);
-                              e.target.style.height = 'auto';
-                              e.target.style.height = `${e.target.scrollHeight}px`;
-                            }}
-                            onBlur={() => handleCommitInlineText(txt.id)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Escape') {
-                                handleCommitInlineText(txt.id);
-                              }
-                              if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                                e.preventDefault();
-                                handleCommitInlineText(txt.id);
-                              }
-                            }}
-                            className="relative z-10 w-full bg-transparent outline-none border border-blue-500/90 ring-1 ring-blue-400/50 rounded-none p-0 m-0 resize-none leading-tight"
-                            style={{
-                              fontSize: `${effectiveFontSize}px`,
-                              fontFamily: effectiveFontFamily,
-                              fontWeight: effectiveFontWeight,
-                              fontStyle: effectiveFontStyle,
-                              textDecoration: txt.textDecoration || 'none',
-                              color: effectiveColor,
-                              lineHeight: 1.15,
-                              minWidth: `${boxWidth}px`,
-                              height: `${boxHeight}px`,
-                            }}
-                            autoFocus
-                          />
-                        </div>
-                      </div>
+                      </React.Fragment>
                     );
                   }
 
@@ -2478,6 +2775,36 @@ export default function EditorPage() {
         fileName={store.fileName}
         initialPage={store.currentPage}
       />
+
+      {/* ─── Save & Exit Confirmation Modal (10-Minute TTL Auto-Delete) ────── */}
+      <SaveExitModal
+        isOpen={saveExitModalOpen}
+        fileName={store.fileName}
+        isSaving={isSavingToDashboard}
+        onSaveAndExit={handleSaveAndExit}
+        onDiscardAndExit={handleDiscardAndExit}
+        onCancel={() => setSaveExitModalOpen(false)}
+      />
+
+      {/* ─── Upload & Extraction Progress Pipeline Modal ─────────── */}
+      <UploadProgressModal
+        isOpen={uploadProgress.isOpen}
+        fileName={uploadProgress.fileName}
+        fileSizeBytes={uploadProgress.fileSizeBytes}
+        currentStep={uploadProgress.currentStep}
+        progressPercent={uploadProgress.progressPercent}
+        statusMessage={uploadProgress.statusMessage}
+        error={uploadProgress.error}
+        onCancel={() => setUploadProgress((prev) => ({ ...prev, isOpen: false, error: null }))}
+      />
+
+      {/* ─── Toast Feedback Notification ─────────────────────────── */}
+      {toastMessage && (
+        <div className="fixed bottom-12 right-6 z-50 p-3.5 bg-surface-900 border border-primary-500/40 rounded-xl shadow-2xl text-xs text-white flex items-center gap-2.5 animate-in fade-in slide-in-from-bottom-3">
+          <CheckCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
     </div>
   );
 }

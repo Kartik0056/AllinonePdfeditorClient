@@ -34,18 +34,28 @@ import {
   ExternalLink,
   Wallet,
   ArrowRight,
+  Download,
+  Timer,
+  AlertTriangle,
+  PenTool,
 } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import { useAuthStore, PaymentDetails } from '../stores/authStore';
 import { projectAPI, authAPI } from '../services/api';
+import { CertificateThumbnail } from './CertificatePage';
 
 interface Project {
   _id: string;
   name: string;
   originalFileName: string;
+  filePath?: string;
   fileSize: number;
   pageCount: number;
   updatedAt: string;
+  createdAt?: string;
+  expiresAt?: string;
+  type?: 'pdf' | 'certificate';
+  templateData?: any;
 }
 
 type TabType = 'overview' | 'profile' | 'payments' | 'security';
@@ -76,6 +86,29 @@ export default function DashboardPage() {
   // ─── Projects State ─────────────────────────────────────────
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
+  const [now, setNow] = useState(Date.now());
+  const [projectFilter, setProjectFilter] = useState<'all' | 'pdf' | 'certificate'>('all');
+
+  // Real-time ticking clock for 10-minute project countdowns
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Auto-prune expired projects when their 10 minutes run out (certificates NEVER auto-expire)
+  useEffect(() => {
+    setProjects((prev) => {
+      const active = prev.filter((p) => {
+        if (p.type === 'certificate') return true;
+        if (!p.expiresAt) return true;
+        const exp = new Date(p.expiresAt).getTime();
+        return exp > now;
+      });
+      return active.length !== prev.length ? active : prev;
+    });
+  }, [now]);
 
   // ─── Profile Form State ─────────────────────────────────────
   const [profileName, setProfileName] = useState(user?.name || '');
@@ -155,21 +188,69 @@ export default function DashboardPage() {
   };
 
   const loadProjects = async () => {
+    let apiProjects: Project[] = [];
     try {
       const response = await projectAPI.list();
-      setProjects(response.data.data || []);
+      apiProjects = (response.data.data || []).map((p: any) => ({
+        ...p,
+        type: 'pdf' as const,
+      }));
     } catch {
       // Offline/demo fallback
     }
+
+    // Load custom user certificates created in Certificate Studio
+    let certProjects: Project[] = [];
+    try {
+      const stored = localStorage.getItem('pdfstudio_custom_templates');
+      if (stored) {
+        const certList = JSON.parse(stored);
+        if (Array.isArray(certList)) {
+          certProjects = certList.map((c: any) => ({
+            _id: c.id,
+            name: c.title || 'Custom Certificate',
+            originalFileName: `${c.data?.organization || 'Certificate'} - ${c.data?.recipientName || 'Award'}.pdf`,
+            fileSize: 1024 * 180,
+            pageCount: 1,
+            updatedAt: c.updatedAt || c.createdAt || new Date().toISOString(),
+            createdAt: c.createdAt || new Date().toISOString(),
+            type: 'certificate' as const,
+            templateData: c,
+          }));
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load certificates for dashboard:', e);
+    }
+
+    setProjects([...certProjects, ...apiProjects]);
     setIsLoadingProjects(false);
   };
 
-  const handleDeleteProject = async (id: string) => {
+  const handleDeleteProject = async (id: string, type?: 'pdf' | 'certificate') => {
     if (!confirm('Are you sure you want to delete this project?')) return;
+
+    if (type === 'certificate' || id.startsWith('user_tmpl_') || id.startsWith('custom_') || id.startsWith('scratch_')) {
+      try {
+        const stored = localStorage.getItem('pdfstudio_custom_templates');
+        if (stored) {
+          const list = JSON.parse(stored);
+          const updated = list.filter((t: any) => t.id !== id);
+          localStorage.setItem('pdfstudio_custom_templates', JSON.stringify(updated));
+        }
+      } catch (e) {
+        console.error('Failed to delete certificate:', e);
+      }
+      setProjects((prev) => prev.filter((p) => p._id !== id));
+      return;
+    }
+
     try {
       await projectAPI.delete(id);
       setProjects((prev) => prev.filter((p) => p._id !== id));
-    } catch {}
+    } catch {
+      setProjects((prev) => prev.filter((p) => p._id !== id));
+    }
   };
 
   // Avatar Upload & client resize
@@ -511,11 +592,45 @@ export default function DashboardPage() {
 
             {/* Projects List */}
             <div>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-bold text-white">Recent PDF Projects</h2>
-                <Link to="/editor" className="text-xs text-primary-400 hover:text-primary-300 font-semibold flex items-center gap-1">
-                  Create New <ArrowRight className="w-3.5 h-3.5" />
-                </Link>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                <div>
+                  <h2 className="text-lg font-bold text-white">Recent Projects & Certificates</h2>
+                  <p className="text-xs text-surface-400">Your edited PDFs and custom certificate designs</p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {/* Category Filter Pills */}
+                  <div className="flex items-center gap-1 bg-surface-900 border border-surface-800 p-1 rounded-xl">
+                    <button
+                      onClick={() => setProjectFilter('all')}
+                      className={`px-2.5 py-1 text-xs rounded-lg font-medium transition-colors ${
+                        projectFilter === 'all' ? 'bg-primary-500 text-white font-bold' : 'text-surface-400 hover:text-white'
+                      }`}
+                    >
+                      All ({projects.length})
+                    </button>
+                    <button
+                      onClick={() => setProjectFilter('pdf')}
+                      className={`px-2.5 py-1 text-xs rounded-lg font-medium transition-colors ${
+                        projectFilter === 'pdf' ? 'bg-primary-500 text-white font-bold' : 'text-surface-400 hover:text-white'
+                      }`}
+                    >
+                      PDFs ({projects.filter((p) => p.type !== 'certificate').length})
+                    </button>
+                    <button
+                      onClick={() => setProjectFilter('certificate')}
+                      className={`px-2.5 py-1 text-xs rounded-lg font-medium transition-colors ${
+                        projectFilter === 'certificate' ? 'bg-gradient-to-r from-amber-500 to-yellow-600 text-black font-bold' : 'text-surface-400 hover:text-white'
+                      }`}
+                    >
+                      Certificates ({projects.filter((p) => p.type === 'certificate').length})
+                    </button>
+                  </div>
+
+                  <Link to="/editor" className="text-xs text-primary-400 hover:text-primary-300 font-semibold flex items-center gap-1 shrink-0 ml-2">
+                    Create New <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
+                </div>
               </div>
 
               {isLoadingProjects ? (
@@ -529,44 +644,218 @@ export default function DashboardPage() {
                   <p className="text-surface-500 text-xs mb-5 max-w-sm mx-auto">
                     Open the PDF Editor or Certificate Studio to create, edit and save your documents to the cloud.
                   </p>
-                  <Link to="/editor" className="btn-primary inline-flex items-center gap-2 text-xs px-4 py-2">
-                    <Plus className="w-4 h-4" /> Open Editor
-                  </Link>
+                  <div className="flex items-center justify-center gap-3">
+                    <Link to="/editor" className="btn-primary inline-flex items-center gap-2 text-xs px-4 py-2">
+                      <Plus className="w-4 h-4" /> Open PDF Editor
+                    </Link>
+                    <Link to="/certificate" className="btn-secondary inline-flex items-center gap-2 text-xs px-4 py-2 border-amber-500/30 text-amber-300 hover:bg-amber-500/10">
+                      <Award className="w-4 h-4 text-amber-400" /> Certificate Studio
+                    </Link>
+                  </div>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {projects.map((project) => (
-                    <div key={project._id} className="card-hover group flex flex-col justify-between">
-                      <div>
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center shrink-0">
-                            <FileText className="w-5 h-5 text-red-400" />
-                          </div>
-                          <button
-                            onClick={(e) => {
-                              e.preventDefault();
-                              handleDeleteProject(project._id);
-                            }}
-                            className="btn-icon p-1.5 opacity-0 group-hover:opacity-100 transition-opacity text-surface-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg"
-                            title="Delete Project"
+                  {projects
+                    .filter((p) => {
+                      if (projectFilter === 'all') return true;
+                      if (projectFilter === 'pdf') return p.type !== 'certificate';
+                      if (projectFilter === 'certificate') return p.type === 'certificate';
+                      return true;
+                    })
+                    .map((project) => {
+                      // ─── CERTIFICATE PROJECT CARD ────────────────────────
+                      if (project.type === 'certificate') {
+                        return (
+                          <div
+                            key={project._id}
+                            className="card-hover group flex flex-col justify-between relative overflow-hidden border border-amber-500/30 bg-surface-900/90 shadow-xl"
                           >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
+                            {/* Top Accent Glow (Gold/Amber) */}
+                            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-600" />
 
-                        <h3 className="text-sm font-semibold text-white truncate mb-1">{project.name}</h3>
-                        <p className="text-xs text-surface-400 truncate mb-3">{project.originalFileName}</p>
-                      </div>
+                            <div>
+                              {/* Faithful Mini Thumbnail */}
+                              {project.templateData ? (
+                                <div className="mb-3 rounded-xl overflow-hidden border border-surface-800 bg-surface-950 p-1">
+                                  <CertificateThumbnail
+                                    template={project.templateData}
+                                    onSelect={() => navigate(`/certificate?editTemplate=${project._id}`)}
+                                  />
+                                </div>
+                              ) : null}
 
-                      <div className="pt-3 border-t border-surface-800 flex items-center justify-between text-xs text-surface-500">
-                        <span>{project.pageCount} pages · {formatSize(project.fileSize)}</span>
-                        <div className="flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          {formatDate(project.updatedAt)}
+                              <div className="flex items-start justify-between gap-2 mb-2 mt-1">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <div className="w-8 h-8 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center shrink-0">
+                                    <Award className="w-4 h-4 text-amber-400" />
+                                  </div>
+                                  <div className="min-w-0">
+                                    <h3 className="text-sm font-bold text-white truncate" title={project.name}>
+                                      {project.name}
+                                    </h3>
+                                    <span className="text-[10px] text-surface-400 block truncate">
+                                      {project.templateData?.data?.recipientName ? `Awarded to: ${project.templateData.data.recipientName}` : 'Custom Certificate'}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 shrink-0">
+                                  <Award className="w-3 h-3 text-amber-400" />
+                                  <span>Certificate</span>
+                                </div>
+                              </div>
+
+                              <p className="text-xs text-surface-400 truncate mb-3" title={project.originalFileName}>
+                                {project.templateData?.data?.organization || project.originalFileName}
+                              </p>
+
+                              {/* Quick Action Buttons */}
+                              <div className="flex items-center gap-2 mb-3">
+                                <Link
+                                  to={`/certificate?editTemplate=${project._id}`}
+                                  className="flex-1 btn-primary text-[11px] py-1.5 px-2.5 flex items-center justify-center gap-1.5 bg-gradient-to-r from-amber-500 to-yellow-600 text-black font-bold hover:brightness-110 shadow-sm"
+                                  title="Open in Certificate Studio to edit"
+                                >
+                                  <PenTool className="w-3.5 h-3.5" />
+                                  <span>Edit in Studio</span>
+                                </Link>
+
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    handleDeleteProject(project._id, 'certificate');
+                                  }}
+                                  className="px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-red-400 hover:text-white bg-red-500/10 hover:bg-red-600/90 border border-red-500/20 transition-all flex items-center gap-1 shadow-sm shrink-0"
+                                  title="Delete this certificate permanently"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <span>Delete</span>
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Card Footer Details */}
+                            <div className="pt-2.5 border-t border-surface-800/80 flex items-center justify-between text-[11px] text-surface-400">
+                              <span className="capitalize">{project.templateData?.category || 'Academic'} · {project.templateData?.orientation || 'Landscape'}</span>
+                              <span className="text-[10px] text-amber-400 flex items-center gap-1 font-semibold">
+                                <Sparkles className="w-3 h-3" />
+                                Certificate Studio
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      // ─── PDF PROJECT CARD ────────────────────────────────
+                      const expiryTime = project.expiresAt
+                        ? new Date(project.expiresAt).getTime()
+                        : new Date(project.updatedAt || project.createdAt || Date.now()).getTime() + 10 * 60 * 1000;
+                      const remainingSecs = Math.max(0, Math.floor((expiryTime - now) / 1000));
+                      const mins = Math.floor(remainingSecs / 60);
+                      const secs = remainingSecs % 60;
+                      const countdownStr = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+                      const isUrgent = remainingSecs < 120;
+                      const isWarning = remainingSecs < 300;
+
+                      const downloadUrl = project.filePath
+                        ? (project.filePath.startsWith('http') ? project.filePath : `/api/files/download/${project.filePath.split('/').pop()}?name=${encodeURIComponent(project.name)}`)
+                        : null;
+
+                      return (
+                        <div
+                          key={project._id}
+                          className={`card-hover group flex flex-col justify-between relative overflow-hidden border ${
+                            isUrgent
+                              ? 'border-red-500/50 bg-red-950/10'
+                              : isWarning
+                              ? 'border-amber-500/40'
+                              : 'border-surface-800'
+                          }`}
+                        >
+                          {/* Top Accent Glow */}
+                          <div
+                            className={`absolute top-0 left-0 right-0 h-1 ${
+                              isUrgent
+                                ? 'bg-gradient-to-r from-red-500 to-rose-600 animate-pulse'
+                                : isWarning
+                                ? 'bg-gradient-to-r from-amber-500 to-yellow-600'
+                                : 'bg-gradient-to-r from-emerald-500 to-primary-500'
+                            }`}
+                          />
+
+                          <div>
+                            <div className="flex items-start justify-between gap-2 mb-3 mt-1">
+                              <div className="w-10 h-10 rounded-xl bg-primary-500/10 border border-primary-500/20 flex items-center justify-center shrink-0">
+                                <FileText className="w-5 h-5 text-primary-400" />
+                              </div>
+
+                              {/* 10-Minute Countdown Badge */}
+                              <div
+                                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono font-bold tracking-tight shadow-sm ${
+                                  isUrgent
+                                    ? 'bg-red-500/20 text-red-300 border border-red-500/40 animate-pulse'
+                                    : isWarning
+                                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                                    : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                                }`}
+                                title="Auto-expires and purges from database & cloud storage after 10 minutes for your privacy"
+                              >
+                                <Timer className="w-3.5 h-3.5" />
+                                <span>{countdownStr} left</span>
+                              </div>
+                            </div>
+
+                            <h3 className="text-sm font-bold text-white truncate mb-1" title={project.name}>
+                              {project.name}
+                            </h3>
+                            <p className="text-xs text-surface-400 truncate mb-3" title={project.originalFileName}>
+                              {project.originalFileName}
+                            </p>
+
+                            {/* Quick Action Buttons */}
+                            <div className="flex items-center gap-2 mb-3">
+                              {downloadUrl && (
+                                <a
+                                  href={downloadUrl}
+                                  download={project.name || 'document.pdf'}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="flex-1 btn-secondary text-[11px] py-1.5 px-2.5 flex items-center justify-center gap-1.5 hover:bg-surface-700/80"
+                                  title="Download edited PDF before it auto-deletes"
+                                >
+                                  <Download className="w-3.5 h-3.5 text-primary-400" />
+                                  <span>Download PDF</span>
+                                </a>
+                              )}
+
+                              {/* Manual Delete Option as requested */}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleDeleteProject(project._id, 'pdf');
+                                }}
+                                className="px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-red-400 hover:text-white bg-red-500/10 hover:bg-red-600/90 border border-red-500/20 transition-all flex items-center gap-1 shadow-sm shrink-0"
+                                title="Manual Delete: Permanently remove this PDF from database & storage immediately"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                <span>Delete</span>
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Card Footer Details */}
+                          <div className="pt-2.5 border-t border-surface-800/80 flex items-center justify-between text-[11px] text-surface-400">
+                            <span>{project.pageCount} pages · {formatSize(project.fileSize)}</span>
+                            <span className="text-[10px] text-surface-500 flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              10m Auto-Delete
+                            </span>
+                          </div>
                         </div>
-                      </div>
-                    </div>
-                  ))}
+                      );
+                    })}
                 </div>
               )}
             </div>

@@ -10,6 +10,7 @@
  */
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Award, Download, Sparkles, Plus, Share2, Check, Copy, Eye,
   Printer, Layers, Palette, FileText, CheckCircle2, ShieldCheck,
@@ -1478,6 +1479,7 @@ export async function downloadCertificateAsPdf(template: CertificateTemplate) {
 // ─── MAIN COMPONENT: CertificatePage ─────────────────────────────────────
 
 export default function CertificatePage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<'studio' | 'marketplace' | 'my-templates'>('studio');
   const [studioToolTab, setStudioToolTab] = useState<'border' | 'content' | 'badges' | 'signatures' | 'style'>('border');
   const [activeTemplate, setActiveTemplate] = useState<CertificateTemplate>(OFFICIAL_TEMPLATES[0]);
@@ -1621,6 +1623,36 @@ export default function CertificatePage() {
     }
   }, []);
 
+  // Handle URL query parameters (?editTemplate=... or ?tab=...)
+  useEffect(() => {
+    const editId = searchParams.get('editTemplate') || searchParams.get('templateId');
+    const tabParam = searchParams.get('tab');
+    if (tabParam && ['studio', 'marketplace', 'my-templates'].includes(tabParam)) {
+      setActiveTab(tabParam as any);
+    }
+    if (editId) {
+      let found = userTemplates.find((t) => t.id === editId);
+      if (!found) {
+        try {
+          const stored = localStorage.getItem('pdfstudio_custom_templates');
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            if (Array.isArray(parsed)) {
+              found = parsed.find((t: any) => t.id === editId);
+            }
+          }
+        } catch {}
+      }
+      if (!found) {
+        found = OFFICIAL_TEMPLATES.find((t) => t.id === editId);
+      }
+      if (found) {
+        setActiveTemplate(found);
+        setActiveTab('studio');
+      }
+    }
+  }, [searchParams, userTemplates]);
+
   // Combined Marketplace Templates
   const allTemplates = useMemo(() => {
     return [...OFFICIAL_TEMPLATES, ...userTemplates.filter((t) => t.isOfficial || (t as any).isPublic !== false)];
@@ -1650,43 +1682,76 @@ export default function CertificatePage() {
 
   // Select a template from marketplace or user list
   const handleSelectTemplate = (template: CertificateTemplate) => {
-    setActiveTemplate({ ...template, id: `custom_${Date.now()}` });
+    const isCustom = !template.isOfficial || template.id.startsWith('user_tmpl_') || template.id.startsWith('custom_') || template.id.startsWith('scratch_');
+    setActiveTemplate({
+      ...template,
+      id: isCustom ? template.id : `custom_${Date.now()}`,
+    });
     setActiveTab('studio');
     setPreviewModalTemplate(null);
   };
 
+  // Open publish & save modal prefilled with current activeTemplate data
+  const handleOpenPublishModal = () => {
+    setPublishForm({
+      title: activeTemplate.title || 'My Custom Certificate',
+      category: activeTemplate.category || 'academic',
+      isPublic: (activeTemplate as any).isPublic !== false,
+      isPaid: activeTemplate.isPaid || false,
+      price: activeTemplate.price || 'Free',
+      authorName: activeTemplate.author || 'Community Designer',
+    });
+    setShowPublishModal(true);
+  };
+
   // Publish current design
   const handleSaveAndPublish = () => {
+    const isExisting = userTemplates.some((t) => t.id === activeTemplate.id);
+    const templateId = isExisting
+      ? activeTemplate.id
+      : (activeTemplate.id.startsWith('user_tmpl_') || activeTemplate.id.startsWith('custom_') || activeTemplate.id.startsWith('scratch_')
+        ? activeTemplate.id
+        : `user_tmpl_${Date.now()}`);
+
     const newTemplate: CertificateTemplate = {
       ...activeTemplate,
-      id: `user_tmpl_${Date.now()}`,
+      id: templateId,
       title: publishForm.title || activeTemplate.title || 'My Custom Certificate',
       category: publishForm.category,
-      author: publishForm.authorName || 'Community Designer',
+      author: publishForm.authorName || activeTemplate.author || 'Community Designer',
       isOfficial: false,
       isPaid: publishForm.isPaid,
       price: publishForm.isPaid ? publishForm.price : 'Free',
     };
     (newTemplate as any).isPublic = publishForm.isPublic;
 
-    const updated = [newTemplate, ...userTemplates];
+    const updated = isExisting
+      ? userTemplates.map((t) => (t.id === templateId ? newTemplate : t))
+      : [newTemplate, ...userTemplates];
+
     setUserTemplates(updated);
     try {
       localStorage.setItem('pdfstudio_custom_templates', JSON.stringify(updated));
     } catch {}
 
     setShowPublishModal(false);
-    setExportSuccess(`Template "${newTemplate.title}" saved & published successfully!`);
+    setExportSuccess(`Template "${newTemplate.title}" saved successfully!`);
     setTimeout(() => setExportSuccess(null), 4000);
   };
 
   // Delete user template
   const handleDeleteUserTemplate = (id: string) => {
+    if (!confirm('Are you sure you want to delete this custom certificate template?')) return;
     const updated = userTemplates.filter((t) => t.id !== id);
     setUserTemplates(updated);
     try {
       localStorage.setItem('pdfstudio_custom_templates', JSON.stringify(updated));
     } catch {}
+    if (previewModalTemplate?.id === id) {
+      setPreviewModalTemplate(null);
+    }
+    setExportSuccess('Template deleted successfully!');
+    setTimeout(() => setExportSuccess(null), 3000);
   };
 
   // Auto-generate Certificate ID
@@ -1856,7 +1921,7 @@ export default function CertificatePage() {
           {activeTab === 'studio' && (
             <>
               <button
-                onClick={() => setShowPublishModal(true)}
+                onClick={handleOpenPublishModal}
                 className="flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-lg text-xs font-semibold text-amber-300 hover:bg-amber-500/10 border border-amber-500/30 transition-colors"
                 title="Publish / Save Template"
               >
@@ -3171,6 +3236,20 @@ export default function CertificatePage() {
                     <PenTool className="w-3.5 h-3.5" />
                     <span>Customize & Edit</span>
                   </button>
+
+                  {!tmpl.isOfficial && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteUserTemplate(tmpl.id);
+                      }}
+                      className="p-2 rounded-xl text-surface-400 hover:text-red-400 bg-surface-800 hover:bg-red-500/20 border border-surface-700 hover:border-red-500/30 transition-colors shrink-0"
+                      title="Delete this custom certificate"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -3311,6 +3390,17 @@ export default function CertificatePage() {
                   <PenTool className="w-3.5 h-3.5" />
                   <span>Customize & Edit</span>
                 </button>
+
+                {!previewModalTemplate.isOfficial && (
+                  <button
+                    onClick={() => handleDeleteUserTemplate(previewModalTemplate.id)}
+                    className="btn-secondary text-xs px-2.5 py-1.5 text-red-400 hover:text-red-300 hover:bg-red-500/20 border border-red-500/30 flex items-center gap-1.5 transition-colors"
+                    title="Delete this custom certificate"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Delete</span>
+                  </button>
+                )}
 
                 <button
                   onClick={() => setPreviewModalTemplate(null)}

@@ -216,6 +216,8 @@ export const projectAPI = {
   list: () => api.get('/projects'),
   get: (id: string) => api.get(`/projects/${id}`),
   create: (data: any) => api.post('/projects', data),
+  saveEdited: (data: { name: string; originalFileName: string; pdfBase64: string; pageCount: number; metadata?: any }) =>
+    api.post('/projects/save-edited', data),
   update: (id: string, data: any) => api.put(`/projects/${id}`, data),
   delete: (id: string) => api.delete(`/projects/${id}`),
 };
