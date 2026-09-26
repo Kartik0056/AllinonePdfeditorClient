@@ -61,6 +61,8 @@ export default function EditorPage() {
   const [inlineEditingId, setInlineEditingId] = useState<string | null>(null);
   const [inlineTextVal, setInlineTextVal] = useState('');
   const inlineInputRef = useRef<HTMLTextAreaElement>(null);
+  const inlineToolbarRef = useRef<HTMLDivElement>(null);
+  const isInteractingWithToolbarRef = useRef(false);
 
   // Interactive drawing & shape state
   const [isDrawing, setIsDrawing] = useState(false);
@@ -2300,10 +2302,30 @@ export default function EditorPage() {
                           onMouseDown={(e) => e.stopPropagation()}
                         >
                           {/* Floating Pro Format Bar Directly Above Text */}
-                          <div className="absolute -top-12 left-0 flex items-center gap-1.5 bg-surface-900/98 backdrop-blur-xl border border-surface-700/90 rounded-xl px-2.5 py-1.5 shadow-2xl text-xs text-white pointer-events-auto whitespace-nowrap z-50 animate-in fade-in slide-in-from-bottom-2">
+                          <div
+                            ref={inlineToolbarRef}
+                            className="absolute -top-12 left-0 flex items-center gap-1.5 bg-surface-900/98 backdrop-blur-xl border border-surface-700/90 rounded-xl px-2.5 py-1.5 shadow-2xl text-xs text-white pointer-events-auto whitespace-nowrap z-50 animate-in fade-in slide-in-from-bottom-2 select-none"
+                            onMouseDown={(e) => {
+                              isInteractingWithToolbarRef.current = true;
+                              e.stopPropagation();
+                              const target = e.target as HTMLElement;
+                              if (!target.closest('select') && !target.closest('input[type="color"]')) {
+                                e.preventDefault();
+                              }
+                            }}
+                            onMouseUp={() => {
+                              setTimeout(() => {
+                                isInteractingWithToolbarRef.current = false;
+                              }, 200);
+                            }}
+                          >
                             {/* Smart Focus Zoom Pill */}
                             <button
                               type="button"
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                              }}
                               onClick={() => {
                                 const nextFactors = [1.0, 1.4, 1.8, 2.2];
                                 const currentIdx = nextFactors.indexOf(focusZoomFactor);
@@ -2311,6 +2333,7 @@ export default function EditorPage() {
                                 setFocusZoomFactor(nextFactor);
                                 if (nextFactor === 1.0) setIsFocusZoomEnabled(false);
                                 else setIsFocusZoomEnabled(true);
+                                inlineInputRef.current?.focus();
                               }}
                               className={`px-2 py-0.5 rounded-lg text-[11px] font-mono font-bold flex items-center gap-1 transition-all ${
                                 isFocusZoomEnabled
@@ -2328,7 +2351,18 @@ export default function EditorPage() {
                             {/* Font Family Selector */}
                             <select
                               value={txt.fontFamily || 'Helvetica'}
-                              onChange={(e) => handleUpdateTextProps(txt.id, { fontFamily: e.target.value })}
+                              onFocus={() => {
+                                isInteractingWithToolbarRef.current = true;
+                              }}
+                              onChange={(e) => {
+                                handleUpdateTextProps(txt.id, { fontFamily: e.target.value });
+                                setTimeout(() => inlineInputRef.current?.focus(), 50);
+                              }}
+                              onBlur={() => {
+                                setTimeout(() => {
+                                  isInteractingWithToolbarRef.current = false;
+                                }, 200);
+                              }}
                               className="bg-surface-800 text-[11px] text-surface-200 border border-surface-700 rounded-lg px-2 py-0.5 outline-none hover:border-primary-500 transition-colors cursor-pointer"
                               title="Font Family"
                             >
@@ -2344,7 +2378,14 @@ export default function EditorPage() {
                             <div className="flex items-center gap-0.5 bg-surface-800 rounded-lg px-1.5 py-0.5 border border-surface-700">
                               <button
                                 type="button"
-                                onClick={() => handleUpdateTextProps(txt.id, { fontSize: Math.max(6, (txt.fontSize || 12) - 1) })}
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                }}
+                                onClick={() => {
+                                  handleUpdateTextProps(txt.id, { fontSize: Math.max(6, (txt.fontSize || 12) - 1) });
+                                  inlineInputRef.current?.focus();
+                                }}
                                 className="text-[11px] text-surface-300 hover:text-white px-1 font-bold"
                                 title="Decrease Font Size"
                               >
@@ -2355,7 +2396,14 @@ export default function EditorPage() {
                               </span>
                               <button
                                 type="button"
-                                onClick={() => handleUpdateTextProps(txt.id, { fontSize: Math.min(96, (txt.fontSize || 12) + 1) })}
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                }}
+                                onClick={() => {
+                                  handleUpdateTextProps(txt.id, { fontSize: Math.min(96, (txt.fontSize || 12) + 1) });
+                                  inlineInputRef.current?.focus();
+                                }}
                                 className="text-[11px] text-surface-300 hover:text-white px-1 font-bold"
                                 title="Increase Font Size"
                               >
@@ -2366,7 +2414,14 @@ export default function EditorPage() {
                             {/* Bold Toggle */}
                             <button
                               type="button"
-                              onClick={() => handleUpdateTextProps(txt.id, { fontWeight: txt.fontWeight === 'bold' ? 'normal' : 'bold' })}
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                              }}
+                              onClick={() => {
+                                handleUpdateTextProps(txt.id, { fontWeight: txt.fontWeight === 'bold' ? 'normal' : 'bold' });
+                                inlineInputRef.current?.focus();
+                              }}
                               className={`px-2 py-0.5 rounded-lg text-xs font-bold transition-colors ${
                                 txt.fontWeight === 'bold' ? 'bg-primary-500 text-white' : 'hover:bg-surface-800 text-surface-300'
                               }`}
@@ -2378,7 +2433,14 @@ export default function EditorPage() {
                             {/* Italic Toggle */}
                             <button
                               type="button"
-                              onClick={() => handleUpdateTextProps(txt.id, { fontStyle: (txt as any).fontStyle === 'italic' ? 'normal' : 'italic' } as any)}
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                              }}
+                              onClick={() => {
+                                handleUpdateTextProps(txt.id, { fontStyle: (txt as any).fontStyle === 'italic' ? 'normal' : 'italic' } as any);
+                                inlineInputRef.current?.focus();
+                              }}
                               className={`px-2 py-0.5 rounded-lg text-xs font-serif italic transition-colors ${
                                 (txt as any).fontStyle === 'italic' ? 'bg-primary-500 text-white' : 'hover:bg-surface-800 text-surface-300'
                               }`}
@@ -2390,7 +2452,14 @@ export default function EditorPage() {
                             {/* Underline Toggle */}
                             <button
                               type="button"
-                              onClick={() => handleToggleUnderline(txt)}
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                              }}
+                              onClick={() => {
+                                handleToggleUnderline(txt);
+                                inlineInputRef.current?.focus();
+                              }}
                               className={`px-2 py-0.5 rounded-lg text-xs font-bold underline transition-colors ${
                                 txt.textDecoration === 'underline' || pageElements.some((a) => a.type === 'annotation' && (a as AnnotationElement).annotationType === 'underline' && Math.abs(a.x - txt.x) < 25 && Math.abs(a.y - (txt.y + txt.height - 2)) < 25)
                                   ? 'bg-primary-500 text-white'
@@ -2404,7 +2473,14 @@ export default function EditorPage() {
                             {/* Strikethrough Toggle */}
                             <button
                               type="button"
-                              onClick={() => handleToggleStrikethrough(txt)}
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                              }}
+                              onClick={() => {
+                                handleToggleStrikethrough(txt);
+                                inlineInputRef.current?.focus();
+                              }}
                               className={`px-2 py-0.5 rounded-lg text-xs font-bold line-through transition-colors ${
                                 txt.textDecoration === 'line-through' || pageElements.some((a) => a.type === 'annotation' && (a as AnnotationElement).annotationType === 'strikethrough' && Math.abs(a.x - txt.x) < 25 && Math.abs(a.y - txt.y) < 25)
                                   ? 'bg-primary-500 text-white'
@@ -2420,7 +2496,18 @@ export default function EditorPage() {
                               <input
                                 type="color"
                                 value={txt.color || '#000000'}
-                                onChange={(e) => handleUpdateTextProps(txt.id, { color: e.target.value })}
+                                onFocus={() => {
+                                  isInteractingWithToolbarRef.current = true;
+                                }}
+                                onChange={(e) => {
+                                  handleUpdateTextProps(txt.id, { color: e.target.value });
+                                  setTimeout(() => inlineInputRef.current?.focus(), 50);
+                                }}
+                                onBlur={() => {
+                                  setTimeout(() => {
+                                    isInteractingWithToolbarRef.current = false;
+                                  }, 200);
+                                }}
                                 className="w-4 h-4 rounded cursor-pointer border-0 bg-transparent p-0"
                                 title="Text Color"
                               />
@@ -2430,6 +2517,10 @@ export default function EditorPage() {
                             <div className="w-px h-3.5 bg-surface-700 mx-0.5" />
                             <button
                               type="button"
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                              }}
                               onClick={() => {
                                 const editor = getEditor();
                                 const dup = editor.duplicateElement(txt.id);
@@ -2442,6 +2533,10 @@ export default function EditorPage() {
                             </button>
                             <button
                               type="button"
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                              }}
                               onClick={() => {
                                 handleDeleteElement(txt.id);
                                 setInlineEditingId(null);
@@ -2455,9 +2550,13 @@ export default function EditorPage() {
                             {/* Done Button */}
                             <button
                               type="button"
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                              }}
                               onClick={() => handleCommitInlineText(txt.id)}
                               className="px-2.5 py-1 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold rounded-lg text-[11px] flex items-center gap-1 shadow-md shadow-emerald-500/20"
-                              title="Done (Ctrl+Enter)"
+                              title="Done (Ctrl+Enter or Enter)"
                             >
                               <Check className="w-3.5 h-3.5" />
                               <span>Done</span>
@@ -2481,12 +2580,31 @@ export default function EditorPage() {
                                 e.target.style.height = 'auto';
                                 e.target.style.height = `${e.target.scrollHeight}px`;
                               }}
-                              onBlur={() => handleCommitInlineText(txt.id)}
+                              onBlur={(e) => {
+                                // If blur was caused by interacting with the floating toolbar, do NOT commit/close!
+                                if (
+                                  isInteractingWithToolbarRef.current ||
+                                  (inlineToolbarRef.current && (
+                                    inlineToolbarRef.current.contains(e.relatedTarget as Node) ||
+                                    inlineToolbarRef.current.contains(document.activeElement)
+                                  ))
+                                ) {
+                                  return;
+                                }
+
+                                // In Smart Focus Zoom mode, user exits explicitly via Done, backdrop click, Escape, or Enter!
+                                if (isFocusZoomEnabled) {
+                                  return;
+                                }
+
+                                handleCommitInlineText(txt.id);
+                              }}
                               onKeyDown={(e) => {
                                 if (e.key === 'Escape') {
+                                  e.preventDefault();
                                   handleCommitInlineText(txt.id);
                                 }
-                                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                                if (e.key === 'Enter' && !e.shiftKey) {
                                   e.preventDefault();
                                   handleCommitInlineText(txt.id);
                                 }
