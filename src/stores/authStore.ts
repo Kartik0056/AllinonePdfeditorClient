@@ -14,6 +14,9 @@ export interface PaymentDetails {
   cardLast4?: string;
   cardHolder?: string;
   cardExpiry?: string;
+  branchName?: string;
+  cardType?: 'debit' | 'credit';
+  cardNetwork?: string;
 }
 
 export interface AuthUser {

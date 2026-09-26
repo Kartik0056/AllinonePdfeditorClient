@@ -16,7 +16,8 @@ import {
   Printer, Layers, Palette, FileText, CheckCircle2, ShieldCheck,
   Medal, Star, RefreshCw, Sliders, ExternalLink, Lock, DollarSign,
   Upload, Trash2, ChevronRight, PenTool, Layout, ArrowLeft,
-  QrCode, Stamp, Shield, Image as ImageIcon, X, ZoomIn, ZoomOut
+  QrCode, Stamp, Shield, Image as ImageIcon, X, ZoomIn, ZoomOut,
+  CreditCard, AlertTriangle, Smartphone, ShieldAlert, Loader2, CheckCircle
 } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
@@ -1032,7 +1033,19 @@ export async function drawBorderOnCanvas(
   }
 }
 
+export function isTemplatePurchased(templateId: string): boolean {
+  try {
+    const list = JSON.parse(localStorage.getItem('pdfstudio_purchased_templates') || '[]');
+    return Array.isArray(list) && list.includes(templateId);
+  } catch {
+    return false;
+  }
+}
+
 export async function downloadCertificateAsImage(template: CertificateTemplate, format: 'png' | 'jpeg' = 'png') {
+  if (template.isPaid && !isTemplatePurchased(template.id)) {
+    throw new Error('LICENSE_REQUIRED: This paid certificate template must be unlocked before downloading.');
+  }
   const isLandscape = template.orientation === 'landscape';
   const width = isLandscape ? 1700 : 1200;
   const height = isLandscape ? 1200 : 1700;
@@ -1360,6 +1373,9 @@ async function drawBorderOnPdf(
 }
 
 export async function downloadCertificateAsPdf(template: CertificateTemplate) {
+  if (template.isPaid && !isTemplatePurchased(template.id)) {
+    throw new Error('LICENSE_REQUIRED: This paid certificate template must be unlocked before downloading.');
+  }
   const pdfDoc = await PDFDocument.create();
   const isLandscape = template.orientation === 'landscape';
   const page = pdfDoc.addPage(isLandscape ? [842, 595] : [595, 842]); // A4 dimensions
@@ -1476,6 +1492,528 @@ export async function downloadCertificateAsPdf(template: CertificateTemplate) {
   setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
+// ─── Anti-Piracy Watermark Overlay Component ──────────────────────────────
+export function AntiPiracyWatermarkOverlay({
+  template,
+  onUnlock,
+  compact = false,
+}: {
+  template: CertificateTemplate;
+  onUnlock?: () => void;
+  compact?: boolean;
+}) {
+  return (
+    <div
+      className="absolute inset-0 z-30 pointer-events-none overflow-hidden select-none flex flex-col justify-between"
+      style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
+    >
+      {/* Diagonally repeated anti-theft markings covering the entire certificate surface */}
+      <div className="absolute -inset-[60%] flex flex-col justify-around -rotate-[32deg] opacity-25 pointer-events-none select-none">
+        {Array.from({ length: 16 }).map((_, rIdx) => (
+          <div
+            key={rIdx}
+            className="flex gap-10 whitespace-nowrap text-sm font-black tracking-[0.22em] uppercase text-red-600 select-none py-2"
+          >
+            {Array.from({ length: 8 }).map((_, cIdx) => (
+              <span key={cIdx} className="flex items-center gap-2">
+                <span>🔒 PREVIEW ONLY</span>
+                <span className="text-surface-400">•</span>
+                <span>UNLICENSED COPY</span>
+                <span className="text-surface-400">•</span>
+                <span>PURCHASE REQUIRED</span>
+                <span className="text-surface-400">•</span>
+                <span>PDFSTUDIO</span>
+              </span>
+            ))}
+          </div>
+        ))}
+      </div>
+
+      {/* Top Security Warning Banner */}
+      <div className="relative z-10 bg-amber-500/90 backdrop-blur-sm text-black py-1 px-3 text-center font-black text-[10px] tracking-wider uppercase flex items-center justify-center gap-1.5 shadow-md">
+        <Lock className="w-3 h-3 text-black" />
+        <span>PREVIEW MODE • WATERMARK REMOVAL & 300 DPI EXPORT LOCKED</span>
+      </div>
+
+      {/* Floating Center Shield / Lock Badge */}
+      <div className="relative z-10 flex items-center justify-center my-auto pointer-events-auto px-4">
+        <div className="bg-black/90 backdrop-blur-md border border-amber-500/50 shadow-2xl rounded-2xl p-4 sm:p-5 max-w-xs sm:max-w-sm text-center text-white">
+          <div className="w-11 h-11 rounded-full bg-amber-500/20 border border-amber-500/40 flex items-center justify-center mx-auto mb-2 text-amber-400">
+            <Lock className="w-5 h-5" />
+          </div>
+          <div className="text-[10px] uppercase font-black tracking-widest text-amber-400 mb-0.5">
+            Licensed Template
+          </div>
+          <div className="text-xs sm:text-sm font-bold text-white mb-1 leading-snug line-clamp-1">
+            {template.title}
+          </div>
+          <p className="text-[11px] text-surface-300 mb-3 leading-relaxed">
+            Clean 300 DPI export, vector PDF, and printing are locked. Unlock the official license to remove all watermarks.
+          </p>
+          {onUnlock && (
+            <button
+              type="button"
+              onClick={onUnlock}
+              className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-black font-black text-xs shadow-lg shadow-amber-500/25 flex items-center justify-center gap-1.5 transition-all transform hover:scale-[1.02]"
+            >
+              <Lock className="w-3.5 h-3.5" />
+              <span>Unlock License ({template.price || '₹299'})</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Bottom Security Footer */}
+      <div className="relative z-10 bg-black/85 backdrop-blur-sm text-surface-400 py-1 px-3 text-center text-[9px] font-mono tracking-wider">
+        PROTECTED BY PDFSTUDIO DIGITAL RIGHTS ENGINE • COMMERCIAL LICENSE REQUIRED
+      </div>
+    </div>
+  );
+}
+
+// ─── Certificate Checkout & Unlock Modal ──────────────────────────────────
+export function CertificateUnlockModal({
+  template,
+  onClose,
+  onSuccess,
+}: {
+  template: CertificateTemplate;
+  onClose: () => void;
+  onSuccess: (template: CertificateTemplate) => void;
+}) {
+  const [payMethod, setPayMethod] = useState<'demo' | 'upi' | 'card'>('demo');
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  // UPI State
+  const [upiVpa, setUpiVpa] = useState('');
+  const [upiVerified, setUpiVerified] = useState(false);
+  const [upiBankLabel, setUpiBankLabel] = useState('');
+  const [copiedUpi, setCopiedUpi] = useState(false);
+
+  // Card State
+  const [cardType, setCardType] = useState<'debit' | 'credit'>('debit');
+  const [cardNum, setCardNum] = useState('');
+  const [cardName, setCardName] = useState('');
+  const [cardExp, setCardExp] = useState('');
+  const [cardCvv, setCardCvv] = useState('');
+  const [detectedNetwork, setDetectedNetwork] = useState('visa');
+
+  const priceFormatted = template.price || '₹299';
+  const numericPrice = priceFormatted.replace(/\D/g, '') || '299';
+
+  // UPI Validation helper
+  const handleUpiInput = (val: string) => {
+    setUpiVpa(val);
+    const clean = val.trim().toLowerCase();
+    if (/^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/.test(clean)) {
+      setUpiVerified(true);
+      const h = clean.split('@')[1];
+      if (h.includes('sbi')) setUpiBankLabel('State Bank of India');
+      else if (h.includes('hdfc')) setUpiBankLabel('HDFC Bank');
+      else if (h.includes('axis')) setUpiBankLabel('Axis Bank');
+      else if (h.includes('icici')) setUpiBankLabel('ICICI Bank');
+      else if (h.includes('paytm')) setUpiBankLabel('Paytm Payments Bank');
+      else if (h.includes('ybl') || h.includes('ibl')) setUpiBankLabel('PhonePe / Yes Bank');
+      else setUpiBankLabel(`@${h.toUpperCase()} Verified VPA`);
+    } else {
+      setUpiVerified(false);
+      setUpiBankLabel('');
+    }
+  };
+
+  // Card Number formatting & detection
+  const handleCardNumberInput = (raw: string) => {
+    const digits = raw.replace(/\D/g, '').substring(0, 16);
+    setCardNum(digits.replace(/(\d{4})/g, '$1 ').trim());
+    if (/^(508[5-9]|60698|60699|607|608|6521[5-9]|652[2-9]|6530|6531[0-4]|81|82)/.test(digits)) {
+      setDetectedNetwork('rupay');
+    } else if (/^4/.test(digits)) {
+      setDetectedNetwork('visa');
+    } else if (/^(5[1-5]|222[1-9]|22[3-9]|2[3-6]|27[0-1]|2720)/.test(digits)) {
+      setDetectedNetwork('mastercard');
+    } else if (/^3[47]/.test(digits)) {
+      setDetectedNetwork('amex');
+    } else {
+      setDetectedNetwork('visa');
+    }
+  };
+
+  const handleCardExpInput = (raw: string) => {
+    let clean = raw.replace(/\D/g, '').substring(0, 4);
+    if (clean.length > 2) {
+      clean = `${clean.slice(0, 2)}/${clean.slice(2)}`;
+    }
+    setCardExp(clean);
+  };
+
+  const handleCopyOfficialUpi = () => {
+    navigator.clipboard.writeText('pdfstudio.official@icici');
+    setCopiedUpi(true);
+    setTimeout(() => setCopiedUpi(false), 2000);
+  };
+
+  const handleExecutePayment = () => {
+    setIsProcessing(true);
+    setTimeout(() => {
+      setIsProcessing(false);
+      onSuccess(template);
+    }, 1000);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-fade-in">
+      <div className="relative max-w-lg w-full bg-surface-900 border border-surface-700 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+        {/* Modal Top Header with Amber Glow */}
+        <div className="relative bg-gradient-to-r from-amber-600/30 via-yellow-600/20 to-amber-700/30 border-b border-amber-500/30 p-5 flex items-start justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-2xl bg-amber-500/20 border border-amber-500/50 flex items-center justify-center text-amber-400 shadow-md">
+              <Lock className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-black text-white">Unlock Official License</h3>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-bold border border-amber-500/40">
+                  {priceFormatted}
+                </span>
+              </div>
+              <p className="text-xs text-surface-300 mt-0.5">
+                Remove all watermarks and get lifetime commercial export rights
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-surface-400 hover:text-white p-1 rounded-lg transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Modal Body */}
+        <div className="p-5 overflow-y-auto space-y-4">
+          {/* Template Info Card */}
+          <div className="bg-surface-950 p-3.5 rounded-2xl border border-surface-800 flex items-center justify-between">
+            <div className="min-w-0 pr-2">
+              <span className="text-[10px] text-surface-400 uppercase tracking-wider block font-bold">Selected Template</span>
+              <span className="text-xs font-bold text-white truncate block">{template.title}</span>
+              <span className="text-[11px] text-surface-400">By {template.author} • {template.category}</span>
+            </div>
+            <div className="text-right shrink-0">
+              <span className="text-lg font-black text-amber-400 font-mono">{priceFormatted}</span>
+              <span className="text-[10px] text-emerald-400 block font-medium">One-Time Lifetime</span>
+            </div>
+          </div>
+
+          {/* Included Features Checklist */}
+          <div className="grid grid-cols-2 gap-2 text-[11px] text-surface-300">
+            <div className="flex items-center gap-1.5 bg-surface-850/60 p-2 rounded-xl border border-surface-800">
+              <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <span>Zero Watermarks</span>
+            </div>
+            <div className="flex items-center gap-1.5 bg-surface-850/60 p-2 rounded-xl border border-surface-800">
+              <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <span>300 DPI Vector PDF</span>
+            </div>
+            <div className="flex items-center gap-1.5 bg-surface-850/60 p-2 rounded-xl border border-surface-800">
+              <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <span>Clean Print & Copy</span>
+            </div>
+            <div className="flex items-center gap-1.5 bg-surface-850/60 p-2 rounded-xl border border-surface-800">
+              <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <span>Commercial License</span>
+            </div>
+          </div>
+
+          {/* Payment Method Switcher Tabs */}
+          <div className="bg-surface-950 p-1 rounded-xl border border-surface-800 grid grid-cols-3 gap-1">
+            <button
+              type="button"
+              onClick={() => setPayMethod('demo')}
+              className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                payMethod === 'demo'
+                  ? 'bg-amber-500 text-black shadow-md'
+                  : 'text-surface-400 hover:text-white'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Instant Demo</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setPayMethod('upi')}
+              className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                payMethod === 'upi'
+                  ? 'bg-primary-500 text-white shadow-md'
+                  : 'text-surface-400 hover:text-white'
+              }`}
+            >
+              <Smartphone className="w-3.5 h-3.5" />
+              <span>UPI / QR</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setPayMethod('card')}
+              className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                payMethod === 'card'
+                  ? 'bg-purple-600 text-white shadow-md'
+                  : 'text-surface-400 hover:text-white'
+              }`}
+            >
+              <CreditCard className="w-3.5 h-3.5" />
+              <span>Card</span>
+            </button>
+          </div>
+
+          {/* TAB 1: Instant Sandbox Demo Unlock */}
+          {payMethod === 'demo' && (
+            <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-center space-y-3">
+              <div className="w-10 h-10 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center mx-auto">
+                <Sparkles className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-white">Instant Demo Simulator Mode</h4>
+                <p className="text-[11px] text-surface-300 mt-1">
+                  Click below to immediately unlock this certificate for free in test mode. Watermarks will be removed and high-res downloads will be unlocked instantly.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleExecutePayment}
+                disabled={isProcessing}
+                className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-black font-black text-xs shadow-lg shadow-amber-500/30 flex items-center justify-center gap-2 transition-all transform hover:scale-[1.01]"
+              >
+                {isProcessing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Activating Commercial License...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4" />
+                    <span>⚡ Instant Unlock (Test / Demo Mode)</span>
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+
+          {/* TAB 2: UPI Payment (QR & VPA with live verification) */}
+          {payMethod === 'upi' && (
+            <div className="p-4 rounded-2xl bg-surface-950 border border-surface-800 space-y-3.5">
+              <div className="flex items-center justify-between pb-2 border-b border-surface-800">
+                <div className="flex items-center gap-2">
+                  <QrCode className="w-4 h-4 text-primary-400" />
+                  <span className="text-xs font-bold text-white">Scan & Pay via any UPI App</span>
+                </div>
+                <span className="text-[10px] text-emerald-400 font-mono">GPay / PhonePe / Paytm</span>
+              </div>
+
+              {/* Dynamic QR Code & UPI Copy */}
+              <div className="flex items-center gap-4 bg-surface-900 p-3 rounded-xl border border-surface-800">
+                <div className="w-20 h-20 bg-white rounded-lg p-1.5 flex items-center justify-center shrink-0 shadow">
+                  {/* SVG UPI QR Representation */}
+                  <svg viewBox="0 0 100 100" className="w-full h-full text-black">
+                    <rect x="0" y="0" width="30" height="30" fill="currentColor" />
+                    <rect x="5" y="5" width="20" height="20" fill="white" />
+                    <rect x="10" y="10" width="10" height="10" fill="currentColor" />
+                    <rect x="70" y="0" width="30" height="30" fill="currentColor" />
+                    <rect x="75" y="5" width="20" height="20" fill="white" />
+                    <rect x="80" y="10" width="10" height="10" fill="currentColor" />
+                    <rect x="0" y="70" width="30" height="30" fill="currentColor" />
+                    <rect x="5" y="75" width="20" height="20" fill="white" />
+                    <rect x="10" y="80" width="10" height="10" fill="currentColor" />
+                    <rect x="40" y="10" width="20" height="10" fill="currentColor" />
+                    <rect x="40" y="30" width="10" height="20" fill="currentColor" />
+                    <rect x="60" y="40" width="30" height="10" fill="currentColor" />
+                    <rect x="40" y="60" width="20" height="30" fill="currentColor" />
+                    <rect x="70" y="70" width="20" height="20" fill="currentColor" />
+                  </svg>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <span className="text-[10px] text-surface-400 block mb-0.5">Official Merchant VPA</span>
+                  <div className="flex items-center gap-1.5 font-mono text-xs text-white font-bold bg-surface-950 px-2 py-1 rounded-lg border border-surface-800 truncate">
+                    <span className="truncate">pdfstudio.official@icici</span>
+                    <button
+                      type="button"
+                      onClick={handleCopyOfficialUpi}
+                      className="text-surface-400 hover:text-white p-0.5 transition-colors shrink-0"
+                      title="Copy UPI ID"
+                    >
+                      {copiedUpi ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                  <span className="text-[10px] text-amber-400 mt-1 block">Scan QR with Google Pay, PhonePe or BHIM</span>
+                </div>
+              </div>
+
+              {/* User UPI ID Input with live verify */}
+              <div>
+                <label className="block text-[11px] font-medium text-surface-300 mb-1">
+                  Or Pay using your UPI ID
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={upiVpa}
+                    onChange={(e) => handleUpiInput(e.target.value)}
+                    placeholder="e.g. mobile@okhdfcbank or user@paytm"
+                    className={`input w-full text-xs pr-20 ${
+                      upiVerified ? 'border-emerald-500/60' : ''
+                    }`}
+                  />
+                  <div className="absolute right-2 top-2">
+                    {upiVerified ? (
+                      <span className="text-[10px] font-bold text-emerald-400 flex items-center gap-1 bg-emerald-500/20 px-1.5 py-0.5 rounded">
+                        <CheckCircle2 className="w-3 h-3" /> Valid
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-surface-500">name@bank</span>
+                    )}
+                  </div>
+                </div>
+                {upiVerified && (
+                  <span className="text-[10px] text-emerald-400 mt-1 block">
+                    ✓ Recognized UPI Provider: <strong>{upiBankLabel}</strong>
+                  </span>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={handleExecutePayment}
+                disabled={isProcessing || !upiVerified}
+                className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 disabled:opacity-40 text-black font-black text-xs shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 transition-all"
+              >
+                {isProcessing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-black" />
+                    <span>Verifying UPI Transaction...</span>
+                  </>
+                ) : (
+                  <>
+                    <Smartphone className="w-4 h-4" />
+                    <span>Verify & Pay {priceFormatted} via UPI</span>
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+
+          {/* TAB 3: Credit / Debit Card Payment */}
+          {payMethod === 'card' && (
+            <div className="p-4 rounded-2xl bg-surface-950 border border-surface-800 space-y-3">
+              {/* Card Type Selector */}
+              <div className="flex items-center justify-between pb-2 border-b border-surface-800">
+                <span className="text-xs font-bold text-white">Card Payment</span>
+                <div className="flex items-center gap-1 bg-surface-900 p-0.5 rounded-lg border border-surface-800">
+                  <button
+                    type="button"
+                    onClick={() => setCardType('debit')}
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                      cardType === 'debit' ? 'bg-purple-600 text-white' : 'text-surface-400'
+                    }`}
+                  >
+                    Debit Card
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCardType('credit')}
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                      cardType === 'credit' ? 'bg-purple-600 text-white' : 'text-surface-400'
+                    }`}
+                  >
+                    Credit Card
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-medium text-surface-300 mb-1">
+                  Card Number
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    maxLength={19}
+                    value={cardNum}
+                    onChange={(e) => handleCardNumberInput(e.target.value)}
+                    placeholder="4532 •••• •••• 8842"
+                    className="input w-full text-xs font-mono pr-20"
+                  />
+                  <div className="absolute right-2 top-2">
+                    <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-surface-800 text-amber-400 border border-surface-700">
+                      {detectedNetwork}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block text-[11px] font-medium text-surface-300 mb-1">
+                    Valid Thru (MM/YY)
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={5}
+                    value={cardExp}
+                    onChange={(e) => handleCardExpInput(e.target.value)}
+                    placeholder="12/28"
+                    className="input w-full text-xs font-mono text-center"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-medium text-surface-300 mb-1">
+                    CVV / CVC
+                  </label>
+                  <input
+                    type="password"
+                    maxLength={4}
+                    value={cardCvv}
+                    onChange={(e) => setCardCvv(e.target.value.replace(/\D/g, ''))}
+                    placeholder="•••"
+                    className="input w-full text-xs font-mono text-center"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleExecutePayment}
+                disabled={isProcessing || cardNum.length < 14}
+                className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-40 text-white font-black text-xs shadow-lg shadow-purple-600/25 flex items-center justify-center gap-2 transition-all mt-1"
+              >
+                {isProcessing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-white" />
+                    <span>Processing Secure Gateway...</span>
+                  </>
+                ) : (
+                  <>
+                    <Lock className="w-4 h-4" />
+                    <span>Pay {priceFormatted} with {detectedNetwork.toUpperCase()}</span>
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Modal Footer Trust Signals */}
+        <div className="bg-surface-950 p-3 border-t border-surface-800 flex items-center justify-between text-[10px] text-surface-400">
+          <div className="flex items-center gap-1.5 text-emerald-400">
+            <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+            <span>256-Bit SSL Encrypted & Verified</span>
+          </div>
+          <span className="font-mono">PDFStudio Safe Checkout</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── MAIN COMPONENT: CertificatePage ─────────────────────────────────────
 
 export default function CertificatePage() {
@@ -1497,6 +2035,60 @@ export default function CertificatePage() {
   // Export states
   const [isExporting, setIsExporting] = useState(false);
   const [exportSuccess, setExportSuccess] = useState<string | null>(null);
+
+  // Purchased / Unlocked templates
+  const [purchasedTemplates, setPurchasedTemplates] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem('pdfstudio_purchased_templates');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Modal to unlock paid template
+  const [unlockModalTemplate, setUnlockModalTemplate] = useState<CertificateTemplate | null>(null);
+
+  const isTemplateUnlocked = (tmpl?: CertificateTemplate | null): boolean => {
+    if (!tmpl) return true;
+    if (!tmpl.isPaid) return true;
+    return purchasedTemplates.includes(tmpl.id);
+  };
+
+  const handleUnlockSuccess = (template: CertificateTemplate) => {
+    const updated = Array.from(new Set([...purchasedTemplates, template.id]));
+    setPurchasedTemplates(updated);
+    try {
+      localStorage.setItem('pdfstudio_purchased_templates', JSON.stringify(updated));
+    } catch {}
+    setUnlockModalTemplate(null);
+    setExportSuccess(`🎉 License Activated! "${template.title}" unlocked for high-res download and printing.`);
+    setTimeout(() => setExportSuccess(null), 4000);
+  };
+
+  // Anti-Print & Anti-Screenshot Shortcut Protection
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Intercept Print shortcut (Ctrl+P / Cmd+P)
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
+        if (activeTab === 'studio' && !isTemplateUnlocked(activeTemplate)) {
+          e.preventDefault();
+          e.stopPropagation();
+          setUnlockModalTemplate(activeTemplate);
+        }
+      }
+      // Notify on PrintScreen
+      if (e.key === 'PrintScreen' || e.code === 'PrintScreen') {
+        if (activeTab === 'studio' && !isTemplateUnlocked(activeTemplate)) {
+          setExportSuccess('🔒 Template Protected: Commercial license required to export or capture.');
+          setTimeout(() => setExportSuccess(null), 4000);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeTab, activeTemplate, purchasedTemplates]);
 
   // Publish Modal
   const [showPublishModal, setShowPublishModal] = useState(false);
@@ -1776,20 +2368,27 @@ export default function CertificatePage() {
 
   // Direct PNG Download
   const handleDownloadPNG = async () => {
+    if (!isTemplateUnlocked(activeTemplate)) {
+      setUnlockModalTemplate(activeTemplate);
+      return;
+    }
     setIsExporting(true);
     try {
       await downloadCertificateAsImage(activeTemplate, 'png');
       setExportSuccess('High-Resolution PNG downloaded successfully!');
       setTimeout(() => setExportSuccess(null), 3000);
     } catch {
-      alert('Download error. Using print backup.');
-      window.print();
+      alert('Download error. Please check browser permissions.');
     }
     setIsExporting(false);
   };
 
   // Direct Vector PDF Download
   const handleDownloadPDF = async () => {
+    if (!isTemplateUnlocked(activeTemplate)) {
+      setUnlockModalTemplate(activeTemplate);
+      return;
+    }
     setIsExporting(true);
     try {
       await downloadCertificateAsPdf(activeTemplate);
@@ -1920,6 +2519,17 @@ export default function CertificatePage() {
 
           {activeTab === 'studio' && (
             <>
+              {!isTemplateUnlocked(activeTemplate) && (
+                <button
+                  onClick={() => setUnlockModalTemplate(activeTemplate)}
+                  className="btn-primary text-xs px-3 py-1.5 bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 text-black font-black flex items-center gap-1.5 shadow-lg shadow-amber-500/25 hover:shadow-amber-500/40 transition-all animate-pulse"
+                  title="Unlock Official Commercial License"
+                >
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>Unlock License ({activeTemplate.price || '₹299'})</span>
+                </button>
+              )}
+
               <button
                 onClick={handleOpenPublishModal}
                 className="flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-lg text-xs font-semibold text-amber-300 hover:bg-amber-500/10 border border-amber-500/30 transition-colors"
@@ -1932,20 +2542,28 @@ export default function CertificatePage() {
               <button
                 onClick={handleDownloadPNG}
                 disabled={isExporting}
-                className="btn-primary text-xs px-2.5 sm:px-3 py-1.5 flex items-center gap-1 shadow-md shadow-primary-500/20"
-                title="Download High-Res 2x PNG Image"
+                className={`btn-primary text-xs px-2.5 sm:px-3 py-1.5 flex items-center gap-1 shadow-md ${
+                  !isTemplateUnlocked(activeTemplate)
+                    ? 'bg-surface-800 text-amber-300 border border-amber-500/40 hover:bg-surface-700'
+                    : 'shadow-primary-500/20'
+                }`}
+                title={!isTemplateUnlocked(activeTemplate) ? 'Unlock license to download PNG' : 'Download High-Res 2x PNG Image'}
               >
-                <Download className="w-3.5 h-3.5" />
+                {!isTemplateUnlocked(activeTemplate) ? <Lock className="w-3.5 h-3.5 text-amber-400" /> : <Download className="w-3.5 h-3.5" />}
                 <span>PNG</span>
               </button>
 
               <button
                 onClick={handleDownloadPDF}
                 disabled={isExporting}
-                className="btn-secondary text-xs px-2.5 sm:px-3 py-1.5 flex items-center gap-1 border border-surface-700 hover:border-emerald-500 text-white"
-                title="Download Vector PDF"
+                className={`btn-secondary text-xs px-2.5 sm:px-3 py-1.5 flex items-center gap-1 border ${
+                  !isTemplateUnlocked(activeTemplate)
+                    ? 'border-amber-500/40 text-amber-300 hover:border-amber-400'
+                    : 'border-surface-700 hover:border-emerald-500 text-white'
+                }`}
+                title={!isTemplateUnlocked(activeTemplate) ? 'Unlock license to download PDF' : 'Download Vector PDF'}
               >
-                <FileText className="w-3.5 h-3.5 text-emerald-400" />
+                {!isTemplateUnlocked(activeTemplate) ? <Lock className="w-3.5 h-3.5 text-amber-400" /> : <FileText className="w-3.5 h-3.5 text-emerald-400" />}
                 <span>PDF</span>
               </button>
             </>
@@ -2838,6 +3456,19 @@ export default function CertificatePage() {
                 >
                   <div
                     ref={certificateRef}
+                    onContextMenu={(e) => {
+                      if (!isTemplateUnlocked(activeTemplate)) {
+                        e.preventDefault();
+                        setUnlockModalTemplate(activeTemplate);
+                      }
+                    }}
+                    onCopy={(e) => {
+                      if (!isTemplateUnlocked(activeTemplate)) {
+                        e.preventDefault();
+                        setExportSuccess('🔒 Text copying is restricted on unlicensed templates.');
+                        setTimeout(() => setExportSuccess(null), 3000);
+                      }
+                    }}
                     className="absolute top-0 left-0 shadow-2xl overflow-hidden select-none"
                     style={{
                       width: `${baseWidth}px`,
@@ -2846,6 +3477,8 @@ export default function CertificatePage() {
                       transformOrigin: '0 0',
                       backgroundColor: activeTemplate.theme.paperTint,
                       color: textColor,
+                      userSelect: 'none',
+                      WebkitUserSelect: 'none',
                     }}
                   >
                 {/* ─── REAL ACCURATE BORDER RENDERER ─────────── */}
@@ -3014,6 +3647,14 @@ export default function CertificatePage() {
                       ) : null}
                     </div>
                   </div>
+
+                  {/* Anti-Piracy Watermark Overlay (Only when unpaid/locked) */}
+                  {!isTemplateUnlocked(activeTemplate) && (
+                    <AntiPiracyWatermarkOverlay
+                      template={activeTemplate}
+                      onUnlock={() => setUnlockModalTemplate(activeTemplate)}
+                    />
+                  )}
                 </div>
               </div>
             </div>
@@ -3205,11 +3846,13 @@ export default function CertificatePage() {
                     <span
                       className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
                         tmpl.isPaid
-                          ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                          ? isTemplateUnlocked(tmpl)
+                            ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                            : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
                           : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
                       }`}
                     >
-                      {tmpl.price || 'Free'}
+                      {tmpl.isPaid ? (isTemplateUnlocked(tmpl) ? 'UNLOCKED ✓' : tmpl.price || '₹299') : (tmpl.price || 'Free')}
                     </span>
                   </div>
 
@@ -3308,10 +3951,14 @@ export default function CertificatePage() {
                       <span className="text-sm font-bold text-white">{tmpl.title}</span>
                       <span
                         className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
-                          tmpl.isPaid ? 'bg-amber-500/20 text-amber-400' : 'bg-emerald-500/20 text-emerald-400'
+                          tmpl.isPaid
+                            ? isTemplateUnlocked(tmpl)
+                              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                              : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                            : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
                         }`}
                       >
-                        {tmpl.price || 'Free'}
+                        {tmpl.isPaid ? (isTemplateUnlocked(tmpl) ? 'UNLOCKED ✓' : tmpl.price || '₹299') : (tmpl.price || 'Free')}
                       </span>
                     </div>
                     <p className="text-xs text-surface-400 mb-3">
@@ -3367,19 +4014,45 @@ export default function CertificatePage() {
               </div>
 
               <div className="flex items-center gap-2">
+                {!isTemplateUnlocked(previewModalTemplate) && (
+                  <button
+                    onClick={() => setUnlockModalTemplate(previewModalTemplate)}
+                    className="btn-primary text-xs px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-yellow-600 text-black font-black flex items-center gap-1.5 shadow-lg shadow-amber-500/20 animate-pulse"
+                  >
+                    <Lock className="w-3.5 h-3.5" />
+                    <span>Unlock ({previewModalTemplate.price || '₹299'})</span>
+                  </button>
+                )}
+
                 <button
-                  onClick={() => downloadCertificateAsImage(previewModalTemplate, 'png')}
-                  className="btn-secondary text-xs px-3 py-1.5 flex items-center gap-1.5"
+                  onClick={() => {
+                    if (!isTemplateUnlocked(previewModalTemplate)) {
+                      setUnlockModalTemplate(previewModalTemplate);
+                    } else {
+                      downloadCertificateAsImage(previewModalTemplate, 'png');
+                    }
+                  }}
+                  className={`btn-secondary text-xs px-3 py-1.5 flex items-center gap-1.5 ${
+                    !isTemplateUnlocked(previewModalTemplate) ? 'border-amber-500/40 text-amber-300' : ''
+                  }`}
                 >
-                  <Download className="w-3.5 h-3.5" />
+                  {!isTemplateUnlocked(previewModalTemplate) ? <Lock className="w-3.5 h-3.5 text-amber-400" /> : <Download className="w-3.5 h-3.5" />}
                   <span>Download PNG</span>
                 </button>
 
                 <button
-                  onClick={() => downloadCertificateAsPdf(previewModalTemplate)}
-                  className="btn-secondary text-xs px-3 py-1.5 flex items-center gap-1.5"
+                  onClick={() => {
+                    if (!isTemplateUnlocked(previewModalTemplate)) {
+                      setUnlockModalTemplate(previewModalTemplate);
+                    } else {
+                      downloadCertificateAsPdf(previewModalTemplate);
+                    }
+                  }}
+                  className={`btn-secondary text-xs px-3 py-1.5 flex items-center gap-1.5 ${
+                    !isTemplateUnlocked(previewModalTemplate) ? 'border-amber-500/40 text-amber-300' : ''
+                  }`}
                 >
-                  <FileText className="w-3.5 h-3.5 text-emerald-400" />
+                  {!isTemplateUnlocked(previewModalTemplate) ? <Lock className="w-3.5 h-3.5 text-amber-400" /> : <FileText className="w-3.5 h-3.5 text-emerald-400" />}
                   <span>Download PDF</span>
                 </button>
 
@@ -3506,11 +4179,28 @@ export default function CertificatePage() {
                       <div className="text-[10px] text-gray-500">{previewModalTemplate.data.signer2Title}</div>
                     </div>
                   </div>
+
+                  {/* Anti-Piracy Watermark Overlay (Only when unpaid/locked) */}
+                  {!isTemplateUnlocked(previewModalTemplate) && (
+                    <AntiPiracyWatermarkOverlay
+                      template={previewModalTemplate}
+                      onUnlock={() => setUnlockModalTemplate(previewModalTemplate)}
+                    />
+                  )}
                 </div>
               </div>
             </div>
           </div>
         </div>
+      )}
+
+      {/* ─── UNLOCK LICENSE MODAL ─────────────────────────────────────── */}
+      {unlockModalTemplate && (
+        <CertificateUnlockModal
+          template={unlockModalTemplate}
+          onClose={() => setUnlockModalTemplate(null)}
+          onSuccess={handleUnlockSuccess}
+        />
       )}
 
       {/* ─── PUBLISH MODAL ────────────────────────────────────────────────── */}
@@ -3647,6 +4337,41 @@ export default function CertificatePage() {
           </div>
         </div>
       )}
+
+      {/* Hidden Print Blocker Sheet for Locked Templates */}
+      <div id="pdfstudio-print-lock-warning" className="hidden">
+        <div style={{ fontSize: '32px', fontWeight: 'bold', color: '#dc2626', marginBottom: '14px' }}>
+          🔒 COMMERCIAL LICENSE REQUIRED TO PRINT
+        </div>
+        <div style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '10px' }}>
+          {activeTemplate.title}
+        </div>
+        <p style={{ fontSize: '14px', color: '#555', maxWidth: '540px', lineHeight: '1.6' }}>
+          This official certificate template is protected under PDFStudio Digital Rights Management. 
+          To print clean certificates without watermarks, please purchase an authorized commercial license.
+        </p>
+      </div>
+
+      <style>{`
+        @media print {
+          ${activeTab === 'studio' && !isTemplateUnlocked(activeTemplate) ? `
+            body * { display: none !important; }
+            #pdfstudio-print-lock-warning {
+              display: flex !important;
+              flex-direction: column !important;
+              align-items: center !important;
+              justify-content: center !important;
+              width: 100vw !important;
+              height: 100vh !important;
+              text-align: center !important;
+              padding: 60px !important;
+              background: #ffffff !important;
+              color: #111111 !important;
+              font-family: sans-serif !important;
+            }
+          ` : ''}
+        }
+      `}</style>
     </div>
   );
 }

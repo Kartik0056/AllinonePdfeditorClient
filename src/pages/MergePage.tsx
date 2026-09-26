@@ -355,6 +355,23 @@ export default function MergePage() {
                     </div>
                   </div>
                 ))}
+
+                {/* Same-size Interactive "Add More Files" Card in Grid */}
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  className="group relative bg-surface-900/40 hover:bg-surface-900/90 rounded-xl border-2 border-dashed border-surface-700/80 hover:border-red-500/80 transition-all duration-200 flex flex-col items-center justify-center cursor-pointer shadow-md hover:shadow-xl hover:shadow-red-500/10 min-h-[220px] aspect-[1/1.55] p-4 text-center select-none overflow-hidden"
+                  title="Click to add more PDF documents"
+                >
+                  <div className="w-12 h-12 rounded-2xl bg-surface-800/80 group-hover:bg-red-500/15 border border-surface-700 group-hover:border-red-500/30 flex items-center justify-center mb-2.5 transition-all group-hover:scale-110 shadow-sm">
+                    <Plus className="w-6 h-6 text-surface-400 group-hover:text-red-400 transition-colors" />
+                  </div>
+                  <span className="text-xs font-bold text-surface-300 group-hover:text-white transition-colors">
+                    Add More Files
+                  </span>
+                  <span className="text-[10px] text-surface-500 mt-1">
+                    Select PDF to combine
+                  </span>
+                </div>
               </div>
             </div>
           </main>
