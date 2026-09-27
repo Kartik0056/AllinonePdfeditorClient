@@ -129,7 +129,9 @@ export default function PassportPhotoPage() {
   // Export / Print State
   const [isExporting, setIsExporting] = useState(false);
   const [singleTargetKb] = useState<number>(50);
-  const [isInspectorOpen, setIsInspectorOpen] = useState(true);
+  const [isInspectorOpen, setIsInspectorOpen] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth >= 1024 : true
+  );
 
   // Canvas refs
   const editCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -795,17 +797,16 @@ export default function PassportPhotoPage() {
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, paperPixelW, paperPixelH);
 
-    // 2. Paper Header Note (Very subtle gray, outside photo area)
+    // 2. Paper Header Note (Subtle gray, safely outside photo area with bounds protection)
     ctx.fillStyle = '#94a3b8';
-    ctx.font = '24px sans-serif';
+    ctx.font = '20px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(
-      `PDF Studio Pro · Passport Photos (${photoWidthMm}×${photoHeightMm}mm) · ${selectedPaper.name}`,
-      paperPixelW / 2,
-      Math.round(sheetMarginMm * pxPerMm * 0.7)
-    );
+    ctx.textBaseline = 'middle';
+    const headerY = Math.round(Math.min(sheetMarginMm * 0.5, 7) * pxPerMm);
+    const headerText = `PDF Studio Pro · Passport Photos (${photoWidthMm}×${photoHeightMm}mm) · ${selectedPaper.name}`;
+    ctx.fillText(headerText, paperPixelW / 2, headerY, paperPixelW - Math.round(20 * pxPerMm));
 
-    // 3. Grid Layout
+    // 3. Grid Layout Calculations
     const pWidthPx = Math.round(photoWidthMm * pxPerMm);
     const pHeightPx = Math.round(photoHeightMm * pxPerMm);
     const gapPx = Math.round(photoGapMm * pxPerMm);
@@ -844,10 +845,26 @@ export default function PassportPhotoPage() {
           ctx.stroke();
         }
       } else {
-        // ─── Multiple Tiled Photos (Auto-Fit maxCols per row, Centered) ───
+        // ─── Multiple Tiled Photos (Auto-Fit maxCols per row, Collision-Free Safe Margins) ───
+        const totalGridRows = Math.max(1, Math.ceil(renderCount / maxCols));
         const gridWidth = maxCols * pWidthPx + (maxCols - 1) * gapPx;
+        const gridHeight = totalGridRows * pHeightPx + (totalGridRows - 1) * gapPx;
+
         const startX = Math.max(marginXPx, Math.round((paperPixelW - gridWidth) / 2));
-        const startY = marginYPx;
+
+        // Safe top offset ensures scissor tick marks never collide with the header note
+        const minSafeTopMm = Math.max(sheetMarginMm + 6, 18);
+        const minSafeTopPx = Math.round(minSafeTopMm * pxPerMm);
+
+        // For full sheet or when grid covers > 60% of paper height: center vertically for balanced presentation.
+        // For partial quantities (1 line, 2 lines, etc.): place at minSafeTopPx so users can cleanly slice off the top strip and preserve paper.
+        let startY = minSafeTopPx;
+        if (totalGridRows >= maxRows || gridHeight / paperPixelH > 0.6) {
+          const availableH = paperPixelH - minSafeTopPx - marginYPx;
+          if (availableH > gridHeight) {
+            startY = minSafeTopPx + Math.round((availableH - gridHeight) / 2);
+          }
+        }
 
         for (let i = 0; i < renderCount; i++) {
           const col = i % maxCols;
@@ -1041,17 +1058,17 @@ export default function PassportPhotoPage() {
       )}
 
       {/* ─── Secondary Studio Sub-Header ───────────────────── */}
-      <div className="h-12 bg-surface-900/95 border-b border-surface-800/80 px-2 sm:px-4 flex items-center justify-between shrink-0 z-30 gap-2 overflow-x-auto scrollbar-none">
+      <div className="h-12 bg-surface-900 border-b border-surface-800 px-2 sm:px-4 flex items-center justify-between shrink-0 z-30 gap-1.5 sm:gap-2 overflow-x-auto scrollbar-none">
         {/* Left: Studio Branding & Standard Preset */}
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             <div className="w-7 h-7 rounded-lg bg-primary-500/10 border border-primary-500/30 flex items-center justify-center shrink-0">
               <Camera className="w-4 h-4 text-primary-400" />
             </div>
-            <span className="text-xs sm:text-sm font-bold text-white tracking-wide hidden sm:inline shrink-0">
+            <span className="text-xs sm:text-sm font-bold text-white tracking-wide hidden md:inline shrink-0">
               Passport Studio
             </span>
-            <span className="text-[9px] px-1.5 py-0.5 rounded bg-primary-500/20 text-primary-300 font-mono font-bold hidden lg:inline-block shrink-0">
+            <span className="text-[9px] px-1.5 py-0.5 rounded bg-primary-500/20 text-primary-300 font-mono font-bold hidden xl:inline-block shrink-0">
               300 DPI
             </span>
           </div>
@@ -1060,11 +1077,11 @@ export default function PassportPhotoPage() {
 
           {/* Quick Preset Selector */}
           <div className="flex items-center gap-1.5 shrink-0">
-            <span className="text-xs text-surface-400 font-medium hidden md:inline shrink-0">Standard:</span>
+            <span className="text-xs text-surface-400 font-medium hidden lg:inline shrink-0">Standard:</span>
             <select
               value={selectedStandardId}
               onChange={(e) => handleSelectStandard(e.target.value)}
-              className="text-xs py-1 px-2 bg-surface-800 border border-surface-700 text-white rounded-md w-40 xs:w-44 sm:w-48 outline-none focus:border-primary-500 shrink-0 font-medium cursor-pointer"
+              className="text-xs py-1 px-1.5 sm:px-2 bg-surface-800 border border-surface-700 text-white rounded-md w-32 xs:w-40 sm:w-44 md:w-48 outline-none focus:border-primary-500 shrink-0 font-medium cursor-pointer truncate"
               title="Select Standard Size Preset"
             >
               {PASSPORT_STANDARDS.map((std) => (
@@ -1075,9 +1092,9 @@ export default function PassportPhotoPage() {
             </select>
           </div>
 
-          {/* Paper Size Selector (shown only in sheet mode to save space) */}
+          {/* Paper Size Selector (shown on large screens in sheet mode) */}
           {activeTab === 'sheet' && (
-            <div className="hidden lg:flex items-center gap-1.5 shrink-0">
+            <div className="hidden xl:flex items-center gap-1.5 shrink-0">
               <span className="text-xs text-surface-400 font-medium shrink-0">Paper:</span>
               <select
                 value={selectedPaper.id}
@@ -1085,7 +1102,7 @@ export default function PassportPhotoPage() {
                   const p = PAPER_SIZES.find((item) => item.id === e.target.value);
                   if (p) setSelectedPaper(p);
                 }}
-                className="text-xs py-1 px-2 bg-surface-800 border border-surface-700 text-white rounded-md w-36 sm:w-40 outline-none focus:border-primary-500 shrink-0 font-medium cursor-pointer"
+                className="text-xs py-1 px-2 bg-surface-800 border border-surface-700 text-white rounded-md w-44 outline-none focus:border-primary-500 shrink-0 font-medium cursor-pointer truncate"
               >
                 {PAPER_SIZES.map((paper) => (
                   <option key={paper.id} value={paper.id} className="bg-surface-900 text-white">
@@ -1098,7 +1115,7 @@ export default function PassportPhotoPage() {
         </div>
 
         {/* Center / Right: Mode Switcher & Export Actions */}
-        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           <div className="flex bg-surface-800/80 p-0.5 rounded-lg border border-surface-700/60 shrink-0">
             <button
               onClick={() => {
@@ -1112,7 +1129,7 @@ export default function PassportPhotoPage() {
               }`}
             >
               <Crop className="w-3.5 h-3.5 shrink-0" />
-              <span><span className="hidden sm:inline">1. </span>Crop<span className="hidden md:inline"> &amp; Enhance</span></span>
+              <span>Crop<span className="hidden sm:inline"> &amp; Enhance</span></span>
             </button>
             <button
               onClick={() => {
@@ -1126,7 +1143,7 @@ export default function PassportPhotoPage() {
               }`}
             >
               <Grid className="w-3.5 h-3.5 shrink-0" />
-              <span><span className="hidden sm:inline">2. </span>Sheet<span className="hidden md:inline"> Layout</span></span>
+              <span>Sheet<span className="hidden sm:inline"> Layout</span></span>
             </button>
           </div>
 
@@ -1135,11 +1152,11 @@ export default function PassportPhotoPage() {
           {/* Isolated Print Button */}
           <button
             onClick={handlePrint}
-            className="btn-primary text-xs px-2.5 sm:px-3 py-1.5 flex items-center gap-1.5 shadow-md shadow-primary-500/20 shrink-0"
+            className="btn-primary text-xs px-2 sm:px-2.5 py-1.5 flex items-center gap-1.5 shadow-md shadow-primary-500/20 shrink-0"
             title="Print ONLY the paper sheet at 100% scale (Excludes webpage UI)"
           >
             <Printer className="w-3.5 h-3.5 shrink-0" />
-            <span className="hidden sm:inline">Print<span className="hidden md:inline"> Sheet</span></span>
+            <span className="hidden sm:inline">Print</span>
           </button>
 
           {/* High-Res PDF Button */}
@@ -1156,7 +1173,7 @@ export default function PassportPhotoPage() {
           {/* Inspector Panel Toggle Button */}
           <button
             onClick={() => setIsInspectorOpen(!isInspectorOpen)}
-            className={`p-1.5 rounded-lg border text-xs flex items-center gap-1.5 transition-colors shrink-0 ${
+            className={`p-1.5 sm:px-2 rounded-lg border text-xs flex items-center gap-1.5 transition-colors shrink-0 ${
               isInspectorOpen
                 ? 'bg-primary-600/20 border-primary-500/50 text-primary-300'
                 : 'bg-surface-800 border-surface-700 text-surface-400 hover:text-white'
@@ -1164,7 +1181,7 @@ export default function PassportPhotoPage() {
             title={isInspectorOpen ? 'Hide Controls Inspector' : 'Show Controls Inspector'}
           >
             <SlidersHorizontal className="w-3.5 h-3.5 shrink-0" />
-            <span className="hidden xl:inline text-[11px] font-semibold">{isInspectorOpen ? 'Hide' : 'Controls'}</span>
+            <span className="hidden xs:inline text-[11px] font-semibold">{isInspectorOpen ? 'Controls' : 'Controls'}</span>
           </button>
         </div>
       </div>
@@ -1429,8 +1446,8 @@ export default function PassportPhotoPage() {
             </div>
           ) : (
             /* Tab 2: Full Multi-Photo Sheet Print Preview */
-            <div className="flex-1 flex flex-col items-center justify-between w-full max-w-4xl min-h-0 gap-2">
-              <div className="bg-surface-900/80 border border-surface-800 rounded-lg px-3 py-1.5 text-[11px] sm:text-xs text-surface-300 flex flex-wrap items-center justify-center gap-2 sm:gap-3 shrink-0 text-center">
+            <div className="flex-1 flex flex-col items-center justify-center w-full max-w-5xl min-h-0 gap-2 py-1">
+              <div className="bg-surface-900/90 border border-surface-800 rounded-lg px-3 py-1.5 text-[11px] sm:text-xs text-surface-300 flex flex-wrap items-center justify-center gap-1.5 sm:gap-3 shrink-0 text-center shadow-sm">
                 {photoCount === 1 ? (
                   <span className="flex items-center gap-1.5 text-amber-300 font-medium">
                     <span>🖼️ Frame Mode:</span>
@@ -1441,22 +1458,30 @@ export default function PassportPhotoPage() {
                     Grid: <strong className="text-white">{Math.min(photoCount, maxPhotosOnSheet)} photos</strong> ({maxCols} per line) on {selectedPaper.name}
                   </span>
                 )}
-                <span>·</span>
+                <span className="hidden xs:inline text-surface-600">·</span>
                 <span>
                   Physical Size: <strong className="text-primary-300">{photoWidthMm} × {photoHeightMm} mm</strong>
                 </span>
-                <span>·</span>
-                <span className="text-emerald-400 font-medium">300 DPI Lab Print Quality</span>
+                <span className="hidden sm:inline text-surface-600">·</span>
+                <span className="text-emerald-400 font-medium hidden sm:inline">300 DPI Lab Print Quality</span>
               </div>
 
               {/* Physical Sheet Canvas Container */}
               <div
                 id="passport-print-sheet-wrapper"
-                className="relative shadow-2xl rounded-sm border border-neutral-300 bg-white overflow-hidden flex items-center justify-center p-2 flex-1 min-h-[200px] max-h-[calc(100vh-240px)] w-auto max-w-full my-auto"
+                className="relative flex items-center justify-center flex-1 min-h-0 w-full max-w-full overflow-hidden p-1 sm:p-2"
               >
                 <canvas
                   ref={sheetCanvasRef}
-                  className="max-h-[calc(100vh-260px)] max-w-full w-auto h-auto object-contain block page-shadow"
+                  className="rounded-xs shadow-2xl block border border-neutral-300/40 bg-white"
+                  style={{
+                    maxHeight: '100%',
+                    maxWidth: '100%',
+                    width: 'auto',
+                    height: 'auto',
+                    objectFit: 'contain',
+                    aspectRatio: `${selectedPaper.widthMm} / ${selectedPaper.heightMm}`,
+                  }}
                 />
               </div>
             </div>
@@ -1467,21 +1492,23 @@ export default function PassportPhotoPage() {
         {isInspectorOpen && (
           <>
             {/* Mobile / Tablet Backdrop Overlay */}
+            {/* Mobile / Tablet Backdrop Overlay */}
             <div
-              className="fixed inset-0 bg-black/60 backdrop-blur-xs z-30 lg:hidden"
+              className="fixed inset-0 bg-black/75 backdrop-blur-xs z-40 lg:hidden"
               onClick={() => setIsInspectorOpen(false)}
             />
 
-            <aside className="fixed lg:static top-12 bottom-0 right-0 z-40 lg:z-20 w-[90vw] sm:w-[380px] lg:w-[350px] xl:w-[380px] shrink-0 bg-surface-900/95 lg:bg-surface-900/90 border-l border-surface-800/80 flex flex-col shadow-2xl lg:shadow-none overflow-hidden transition-all duration-200">
+            <aside className="fixed inset-y-0 right-0 z-50 lg:static lg:z-20 w-[92vw] sm:w-[380px] lg:w-[350px] xl:w-[380px] shrink-0 bg-[#18181b] border-l border-surface-700/80 flex flex-col shadow-2xl lg:shadow-none overflow-hidden transition-all duration-200">
               {/* Mobile Close Bar */}
-              <div className="flex lg:hidden items-center justify-between px-3 py-2 border-b border-surface-800 bg-surface-950/60 shrink-0">
-                <span className="text-xs font-bold text-white flex items-center gap-1.5">
+              <div className="flex lg:hidden items-center justify-between px-3.5 py-3 border-b border-surface-800 bg-surface-950 shrink-0">
+                <span className="text-xs font-bold text-white flex items-center gap-2">
                   <SlidersHorizontal className="w-3.5 h-3.5 text-primary-400" />
                   Studio Controls &amp; Settings
                 </span>
                 <button
                   onClick={() => setIsInspectorOpen(false)}
-                  className="p-1 rounded-md text-surface-400 hover:text-white hover:bg-surface-800"
+                  className="p-1 rounded-md text-surface-400 hover:text-white bg-surface-800/60 hover:bg-surface-800 transition-colors"
+                  aria-label="Close Inspector"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -1491,7 +1518,7 @@ export default function PassportPhotoPage() {
               <div className="flex border-b border-surface-800/80 p-1.5 sm:p-2 gap-1 bg-surface-900/40 shrink-0">
                 <button
                   onClick={() => { setInspectorTab('crop_size'); setActiveTab('edit'); }}
-                  className={`flex-1 py-1.5 px-1 rounded-lg text-[11px] sm:text-xs font-semibold flex items-center justify-center gap-1 transition-colors ${
+                  className={`flex-1 py-1.5 px-1 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-colors ${
                     inspectorTab === 'crop_size'
                       ? 'bg-primary-600/30 text-primary-300 border border-primary-500/40'
                       : 'text-surface-400 hover:text-white'
@@ -1499,25 +1526,25 @@ export default function PassportPhotoPage() {
                   title="Photo Size & Crop Controls"
                 >
                   <Crop className="w-3.5 h-3.5 shrink-0" />
-                  <span className="truncate">Size &amp; Crop</span>
+                  <span>Crop</span>
                 </button>
 
                 <button
                   onClick={() => { setInspectorTab('photoshop'); setActiveTab('edit'); }}
-                  className={`flex-1 py-1.5 px-1 rounded-lg text-[11px] sm:text-xs font-semibold flex items-center justify-center gap-1 transition-colors ${
+                  className={`flex-1 py-1.5 px-1 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-colors ${
                     inspectorTab === 'photoshop'
                       ? 'bg-primary-600/30 text-primary-300 border border-primary-500/40'
                       : 'text-surface-400 hover:text-white'
                   }`}
-                  title="Tone Curve & Enhancements"
+                  title="Tone Curves & Adjustments"
                 >
                   <Sliders className="w-3.5 h-3.5 shrink-0" />
-                  <span className="truncate">Tone Curve</span>
+                  <span>Curves</span>
                 </button>
 
                 <button
                   onClick={() => { setInspectorTab('background'); setActiveTab('edit'); }}
-                  className={`flex-1 py-1.5 px-1 rounded-lg text-[11px] sm:text-xs font-semibold flex items-center justify-center gap-1 transition-colors ${
+                  className={`flex-1 py-1.5 px-1 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-colors ${
                     inspectorTab === 'background'
                       ? 'bg-primary-600/30 text-primary-300 border border-primary-500/40'
                       : 'text-surface-400 hover:text-white'
@@ -1525,12 +1552,12 @@ export default function PassportPhotoPage() {
                   title="Studio Backdrop Color"
                 >
                   <Palette className="w-3.5 h-3.5 shrink-0" />
-                  <span className="truncate">Backdrop</span>
+                  <span>Backdrop</span>
                 </button>
 
                 <button
                   onClick={() => { setInspectorTab('grid'); setActiveTab('sheet'); }}
-                  className={`flex-1 py-1.5 px-1 rounded-lg text-[11px] sm:text-xs font-semibold flex items-center justify-center gap-1 transition-colors ${
+                  className={`flex-1 py-1.5 px-1 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-colors ${
                     inspectorTab === 'grid'
                       ? 'bg-primary-600/30 text-primary-300 border border-primary-500/40'
                       : 'text-surface-400 hover:text-white'
@@ -1538,7 +1565,7 @@ export default function PassportPhotoPage() {
                   title="Sheet Grid & Quantity Layout"
                 >
                   <Grid className="w-3.5 h-3.5 shrink-0" />
-                  <span className="truncate">Sheet Grid</span>
+                  <span>Sheet</span>
                 </button>
               </div>
 
@@ -1929,6 +1956,25 @@ export default function PassportPhotoPage() {
             {/* ─── TAB 4: Sheet Grid & Print Layout (A4, 4x6) ── */}
             {inspectorTab === 'grid' && (
               <div className="space-y-4">
+                {/* Paper Size Selector */}
+                <div>
+                  <label className="text-xs font-bold text-white block mb-1">Sheet Paper Type &amp; Size</label>
+                  <select
+                    value={selectedPaper.id}
+                    onChange={(e) => {
+                      const p = PAPER_SIZES.find((item) => item.id === e.target.value);
+                      if (p) setSelectedPaper(p);
+                    }}
+                    className="w-full text-xs py-2 px-2.5 bg-surface-850 border border-surface-750 text-white rounded-lg outline-none focus:border-primary-500 font-medium cursor-pointer"
+                  >
+                    {PAPER_SIZES.map((paper) => (
+                      <option key={paper.id} value={paper.id} className="bg-surface-900 text-white">
+                        {paper.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 {/* Auto-Fit Information Banner */}
                 <div className="bg-primary-950/40 border border-primary-500/30 rounded-xl p-3">
                   <div className="flex items-center justify-between mb-1">
@@ -1940,7 +1986,7 @@ export default function PassportPhotoPage() {
                     </span>
                   </div>
                   <p className="text-[11px] text-surface-300 leading-relaxed">
-                    Photo width (<strong className="text-white">{photoWidthMm}mm</strong>) ke hisab se 1 line me <strong className="text-primary-300">{maxCols} photos</strong> aayengi. {selectedPaper.name} sheet par total <strong className="text-primary-300">{maxPhotosOnSheet} photos</strong> ({maxRows} lines) fit ho sakti hain.
+                    Photo width (<strong className="text-white">{photoWidthMm}mm</strong>) ke hisab se 1 line me <strong className="text-primary-300">{maxCols} photos</strong> aayengi. {selectedPaper.name} par total <strong className="text-primary-300">{maxPhotosOnSheet} photos</strong> ({maxRows} lines) fit ho sakti hain.
                   </p>
                 </div>
 
@@ -1980,7 +2026,7 @@ export default function PassportPhotoPage() {
                       }`}
                     >
                       <div className="text-xs font-bold">1 Line ({maxCols} Photos)</div>
-                      <div className="text-[10px] text-surface-400">1 Full Row on {selectedPaper.name}</div>
+                      <div className="text-[10px] text-surface-400">1 Full Row on Paper</div>
                     </button>
 
                     <button
@@ -1992,7 +2038,7 @@ export default function PassportPhotoPage() {
                       }`}
                     >
                       <div className="text-xs font-bold">2 Lines ({Math.min(2 * maxCols, maxPhotosOnSheet)} Photos)</div>
-                      <div className="text-[10px] text-surface-400">2 Full Rows ({Math.min(2 * maxCols, maxPhotosOnSheet)} photos)</div>
+                      <div className="text-[10px] text-surface-400">2 Full Rows on Paper</div>
                     </button>
 
                     <button
