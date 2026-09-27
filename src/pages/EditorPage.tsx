@@ -60,7 +60,7 @@ export default function EditorPage() {
   const [selectedElement, setSelectedElement] = useState<PDFElement | null>(null);
   const [inlineEditingId, setInlineEditingId] = useState<string | null>(null);
   const [inlineTextVal, setInlineTextVal] = useState('');
-  const inlineInputRef = useRef<HTMLTextAreaElement>(null);
+  const inlineInputRef = useRef<any>(null);
   const inlineToolbarRef = useRef<HTMLDivElement>(null);
   const isInteractingWithToolbarRef = useRef(false);
 
@@ -1316,12 +1316,10 @@ export default function EditorPage() {
                 <FileText className="w-8 h-8 text-white" />
               </div>
 
-              {/* 20MB Limit Badge */}
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary-500/15 border border-primary-500/30 text-primary-300 text-xs font-semibold mb-3">
-                <Lock className="w-3.5 h-3.5 text-primary-400" />
-                <span>Max 20MB Size Limit</span>
-                <span className="text-surface-500">·</span>
-                <span>10m Auto-Delete Privacy</span>
+              {/* Pro Feature Badge */}
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary-500/10 border border-primary-500/20 text-primary-300 text-xs font-semibold mb-3">
+                <Sparkles className="w-3.5 h-3.5 text-primary-400" />
+                <span>Smart Vector PDF Editor</span>
               </div>
 
               <h1 className="text-2xl font-bold text-white mb-2 tracking-tight">Open a PDF</h1>
@@ -1340,9 +1338,9 @@ export default function EditorPage() {
                   className="hidden"
                   onChange={handleFileSelect}
                 />
-                <Upload className="w-10 h-10 text-primary-400 mx-auto mb-3 animate-bounce" />
+                <Upload className="w-10 h-10 text-primary-400 mx-auto mb-3" />
                 <p className="text-surface-200 font-semibold text-sm">Drop PDF here or click to browse</p>
-                <p className="text-surface-400 text-xs mt-1.5 font-mono">Maximum file size: 20MB</p>
+                <p className="text-surface-400 text-xs mt-1.5">Edit text, signatures, shapes & annotate</p>
               </div>
 
               <div className="flex items-center gap-3 justify-center mb-2">
@@ -1447,16 +1445,6 @@ export default function EditorPage() {
           </span>
           <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-800 text-surface-400 font-mono shrink-0">
             {totalPages} {totalPages === 1 ? 'page' : 'pages'}
-          </span>
-
-          {/* Strict 20MB & 10m TTL Badges */}
-          <span className="hidden xl:inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-primary-500/10 text-primary-300 border border-primary-500/30 font-medium shrink-0">
-            <Lock className="w-3 h-3" />
-            Max 20MB
-          </span>
-          <span className="hidden xl:inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 font-medium shrink-0">
-            <Clock className="w-3 h-3" />
-            10m Auto-Delete
           </span>
         </div>
 
@@ -2276,6 +2264,12 @@ export default function EditorPage() {
                     const effectiveColor = txt.color || '#000000';
                     const boxWidth = Math.max(txt.width * scale * zoomFactor, 60);
                     const boxHeight = Math.max(txt.height * scale * zoomFactor, effectiveFontSize * 1.25);
+                    const isMultiline = inlineTextVal.includes('\n');
+
+                    // Smart bounds check to prevent horizontal scrollbars and top-cutoff
+                    const pageWidth = (store.document?.pages[store.currentPage - 1]?.width || 600) * scale;
+                    const isNearRightEdge = (txt.x * scale + 280) > pageWidth || (txt.x * scale > 320);
+                    const isNearTopEdge = (txt.y * scale) < 55;
 
                     return (
                       <React.Fragment key={txt.id}>
@@ -2289,22 +2283,25 @@ export default function EditorPage() {
                         )}
 
                         <div
-                          className={`absolute z-40 group transition-all duration-200 ${
-                            isFocusZoomEnabled ? 'ring-4 ring-primary-500/70 shadow-2xl rounded-sm' : ''
+                          className={`absolute z-40 group ${
+                            isFocusZoomEnabled ? 'ring-2 ring-primary-500 shadow-2xl rounded-sm' : ''
                           }`}
                           style={{
                             left: txt.x * scale,
                             top: txt.y * scale,
                             minWidth: boxWidth,
-                            transformOrigin: 'top left',
                           }}
                           onClick={(e) => e.stopPropagation()}
                           onMouseDown={(e) => e.stopPropagation()}
                         >
-                          {/* Floating Pro Format Bar Directly Above Text */}
+                          {/* Floating Pro Format Ribbon Directly Above/Below Text */}
                           <div
                             ref={inlineToolbarRef}
-                            className="absolute -top-12 left-0 flex items-center gap-1.5 bg-surface-900/98 backdrop-blur-xl border border-surface-700/90 rounded-xl px-2.5 py-1.5 shadow-2xl text-xs text-white pointer-events-auto whitespace-nowrap z-50 animate-in fade-in slide-in-from-bottom-2 select-none"
+                            className={`absolute flex items-center gap-1.5 bg-[#18181b] border border-surface-700 rounded-xl px-2.5 py-1.5 shadow-2xl shadow-black/80 text-xs text-white pointer-events-auto whitespace-nowrap z-50 select-none ${
+                              isNearTopEdge ? 'top-[calc(100%+8px)]' : '-top-12'
+                            } ${
+                              isNearRightEdge ? 'right-0' : 'left-0'
+                            }`}
                             onMouseDown={(e) => {
                               isInteractingWithToolbarRef.current = true;
                               e.stopPropagation();
@@ -2333,7 +2330,10 @@ export default function EditorPage() {
                                 setFocusZoomFactor(nextFactor);
                                 if (nextFactor === 1.0) setIsFocusZoomEnabled(false);
                                 else setIsFocusZoomEnabled(true);
-                                inlineInputRef.current?.focus();
+                                if (inlineInputRef.current) {
+                                  inlineInputRef.current.style.height = '';
+                                  setTimeout(() => inlineInputRef.current?.focus(), 20);
+                                }
                               }}
                               className={`px-2 py-0.5 rounded-lg text-[11px] font-mono font-bold flex items-center gap-1 transition-all ${
                                 isFocusZoomEnabled
@@ -2363,7 +2363,7 @@ export default function EditorPage() {
                                   isInteractingWithToolbarRef.current = false;
                                 }, 200);
                               }}
-                              className="bg-surface-800 text-[11px] text-surface-200 border border-surface-700 rounded-lg px-2 py-0.5 outline-none hover:border-primary-500 transition-colors cursor-pointer"
+                              className="bg-surface-800 text-[11px] text-surface-200 border border-surface-700 rounded-lg px-2 py-0.5 outline-none hover:border-primary-500 transition-colors cursor-pointer max-w-[105px]"
                               title="Font Family"
                             >
                               <option value="Helvetica, Arial, sans-serif">Helvetica</option>
@@ -2449,48 +2449,6 @@ export default function EditorPage() {
                               I
                             </button>
 
-                            {/* Underline Toggle */}
-                            <button
-                              type="button"
-                              onMouseDown={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                              }}
-                              onClick={() => {
-                                handleToggleUnderline(txt);
-                                inlineInputRef.current?.focus();
-                              }}
-                              className={`px-2 py-0.5 rounded-lg text-xs font-bold underline transition-colors ${
-                                txt.textDecoration === 'underline' || pageElements.some((a) => a.type === 'annotation' && (a as AnnotationElement).annotationType === 'underline' && Math.abs(a.x - txt.x) < 25 && Math.abs(a.y - (txt.y + txt.height - 2)) < 25)
-                                  ? 'bg-primary-500 text-white'
-                                  : 'hover:bg-surface-800 text-surface-300'
-                              }`}
-                              title="Toggle Underline (U)"
-                            >
-                              U
-                            </button>
-
-                            {/* Strikethrough Toggle */}
-                            <button
-                              type="button"
-                              onMouseDown={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                              }}
-                              onClick={() => {
-                                handleToggleStrikethrough(txt);
-                                inlineInputRef.current?.focus();
-                              }}
-                              className={`px-2 py-0.5 rounded-lg text-xs font-bold line-through transition-colors ${
-                                txt.textDecoration === 'line-through' || pageElements.some((a) => a.type === 'annotation' && (a as AnnotationElement).annotationType === 'strikethrough' && Math.abs(a.x - txt.x) < 25 && Math.abs(a.y - txt.y) < 25)
-                                  ? 'bg-primary-500 text-white'
-                                  : 'hover:bg-surface-800 text-surface-300'
-                              }`}
-                              title="Toggle Strikethrough (S)"
-                            >
-                              S
-                            </button>
-
                             {/* Text Color Picker */}
                             <div className="flex items-center gap-1 pl-1 border-l border-surface-700">
                               <input
@@ -2522,29 +2480,13 @@ export default function EditorPage() {
                                 e.stopPropagation();
                               }}
                               onClick={() => {
-                                const editor = getEditor();
-                                const dup = editor.duplicateElement(txt.id);
-                                if (dup) refreshPageElements(store.currentPage);
-                              }}
-                              className="p-1 hover:text-primary-300 rounded text-surface-400"
-                              title="Duplicate Text"
-                            >
-                              <Copy className="w-3 h-3" />
-                            </button>
-                            <button
-                              type="button"
-                              onMouseDown={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                              }}
-                              onClick={() => {
                                 handleDeleteElement(txt.id);
                                 setInlineEditingId(null);
                               }}
                               className="p-1 hover:text-red-400 rounded text-surface-400"
                               title="Delete Text"
                             >
-                              <Trash2 className="w-3 h-3" />
+                              <Trash2 className="w-3.5 h-3.5" />
                             </button>
 
                             {/* Done Button */}
@@ -2563,66 +2505,98 @@ export default function EditorPage() {
                             </button>
                           </div>
 
-                          {/* In-Place Textarea with seamless whiteout backing */}
+                          {/* In-Place Text Input with seamless whiteout backing */}
                           <div className="relative">
                             <div
-                              className="absolute inset-0 bg-white pointer-events-none rounded-sm"
-                              style={{
-                                minHeight: `${boxHeight}px`,
-                                minWidth: `${boxWidth}px`,
-                              }}
+                              className="absolute -inset-0.5 bg-white pointer-events-none rounded-sm"
                             />
-                            <textarea
-                              ref={inlineInputRef}
-                              value={inlineTextVal}
-                              onChange={(e) => {
-                                setInlineTextVal(e.target.value);
-                                e.target.style.height = 'auto';
-                                e.target.style.height = `${e.target.scrollHeight}px`;
-                              }}
-                              onBlur={(e) => {
-                                // If blur was caused by interacting with the floating toolbar, do NOT commit/close!
-                                if (
-                                  isInteractingWithToolbarRef.current ||
-                                  (inlineToolbarRef.current && (
-                                    inlineToolbarRef.current.contains(e.relatedTarget as Node) ||
-                                    inlineToolbarRef.current.contains(document.activeElement)
-                                  ))
-                                ) {
-                                  return;
-                                }
-
-                                // In Smart Focus Zoom mode, user exits explicitly via Done, backdrop click, Escape, or Enter!
-                                if (isFocusZoomEnabled) {
-                                  return;
-                                }
-
-                                handleCommitInlineText(txt.id);
-                              }}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Escape') {
-                                  e.preventDefault();
+                            {isMultiline ? (
+                              <textarea
+                                ref={inlineInputRef}
+                                value={inlineTextVal}
+                                onChange={(e) => {
+                                  setInlineTextVal(e.target.value);
+                                  e.target.style.height = 'auto';
+                                  e.target.style.height = `${e.target.scrollHeight}px`;
+                                }}
+                                onBlur={(e) => {
+                                  if (
+                                    isInteractingWithToolbarRef.current ||
+                                    (inlineToolbarRef.current && (
+                                      inlineToolbarRef.current.contains(e.relatedTarget as Node) ||
+                                      inlineToolbarRef.current.contains(document.activeElement)
+                                    ))
+                                  ) {
+                                    return;
+                                  }
+                                  if (isFocusZoomEnabled) return;
                                   handleCommitInlineText(txt.id);
-                                }
-                                if (e.key === 'Enter' && !e.shiftKey) {
-                                  e.preventDefault();
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Escape') {
+                                    e.preventDefault();
+                                    handleCommitInlineText(txt.id);
+                                  }
+                                  if (e.key === 'Enter' && !e.shiftKey) {
+                                    e.preventDefault();
+                                    handleCommitInlineText(txt.id);
+                                  }
+                                }}
+                                className="relative z-10 w-full bg-white outline-none border border-primary-500 rounded-sm px-1 py-0.5 m-0 resize-none leading-tight"
+                                style={{
+                                  fontSize: `${effectiveFontSize}px`,
+                                  fontFamily: effectiveFontFamily,
+                                  fontWeight: effectiveFontWeight,
+                                  fontStyle: effectiveFontStyle,
+                                  textDecoration: txt.textDecoration || 'none',
+                                  color: effectiveColor,
+                                  minWidth: `${boxWidth}px`,
+                                  minHeight: `${boxHeight}px`,
+                                }}
+                                autoFocus
+                              />
+                            ) : (
+                              <input
+                                ref={inlineInputRef}
+                                type="text"
+                                value={inlineTextVal}
+                                onChange={(e) => {
+                                  setInlineTextVal(e.target.value);
+                                }}
+                                onBlur={(e) => {
+                                  if (
+                                    isInteractingWithToolbarRef.current ||
+                                    (inlineToolbarRef.current && (
+                                      inlineToolbarRef.current.contains(e.relatedTarget as Node) ||
+                                      inlineToolbarRef.current.contains(document.activeElement)
+                                    ))
+                                  ) {
+                                    return;
+                                  }
+                                  if (isFocusZoomEnabled) return;
                                   handleCommitInlineText(txt.id);
-                                }
-                              }}
-                              className="relative z-10 w-full bg-transparent outline-none border-2 border-primary-500/90 ring-2 ring-primary-400/40 rounded-sm p-0.5 m-0 resize-none leading-tight"
-                              style={{
-                                fontSize: `${effectiveFontSize}px`,
-                                fontFamily: effectiveFontFamily,
-                                fontWeight: effectiveFontWeight,
-                                fontStyle: effectiveFontStyle,
-                                textDecoration: txt.textDecoration || 'none',
-                                color: effectiveColor,
-                                lineHeight: 1.15,
-                                minWidth: `${boxWidth}px`,
-                                height: `${boxHeight}px`,
-                              }}
-                              autoFocus
-                            />
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Escape' || e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleCommitInlineText(txt.id);
+                                  }
+                                }}
+                                className="relative z-10 bg-white outline-none border border-primary-500 rounded-sm px-1 py-0 m-0 leading-none shadow-sm"
+                                style={{
+                                  fontSize: `${effectiveFontSize}px`,
+                                  fontFamily: effectiveFontFamily,
+                                  fontWeight: effectiveFontWeight,
+                                  fontStyle: effectiveFontStyle,
+                                  textDecoration: txt.textDecoration || 'none',
+                                  color: effectiveColor,
+                                  minWidth: `${boxWidth}px`,
+                                  height: `${boxHeight}px`,
+                                  lineHeight: `${boxHeight}px`,
+                                }}
+                                autoFocus
+                              />
+                            )}
                           </div>
                         </div>
                       </React.Fragment>
@@ -2632,7 +2606,7 @@ export default function EditorPage() {
                   return (
                     <div
                       key={txt.id}
-                      className={`absolute select-none transition-all ${
+                      className={`absolute select-none ${
                         store.activeTool === 'draw' ? 'pointer-events-none' : ''
                       } ${
                         isDraggingThis
@@ -2644,20 +2618,20 @@ export default function EditorPage() {
                           : isMatch
                           ? 'cursor-pointer bg-amber-400/20 z-10'
                           : 'cursor-pointer hover:bg-blue-500/10 hover:outline hover:outline-1 hover:outline-blue-400/40'
-                      } ${isEditedOrNew ? 'bg-white whitespace-pre overflow-hidden flex items-start z-10' : ''}`}
+                      } ${isEditedOrNew ? 'bg-white whitespace-pre overflow-hidden flex items-center z-10' : ''}`}
                       style={{
                         left: txt.x * scale,
                         top: txt.y * scale,
                         width: Math.max(txt.width * scale, 20),
-                        height: Math.max(txt.height * scale, (txt.fontSize || 12) * scale * 1.15),
+                        height: Math.max(txt.height * scale, (txt.fontSize || 12) * scale * 1.25),
                         fontSize: `${(txt.fontSize || 12) * scale}px`,
                         fontFamily: txt.fontFamily || 'Helvetica, Arial, sans-serif',
                         color: txt.color || '#000000',
                         fontWeight: txt.fontWeight || 'normal',
                         fontStyle: (txt as any).fontStyle || 'normal',
                         textDecoration: txt.textDecoration || 'none',
-                        lineHeight: 1.15,
-                        padding: 0,
+                        lineHeight: 1,
+                        padding: '0 1px',
                         margin: 0,
                         touchAction: !txt.isOriginal ? 'none' : undefined,
                       }}

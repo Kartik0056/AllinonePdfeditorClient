@@ -7,7 +7,7 @@ import React, { useState, useRef, useCallback } from 'react';
 import {
   Merge, Upload, Trash2, Download, Plus, Loader2,
   ArrowRight, ArrowUp, ArrowDown, Eye, Check, CheckCircle2,
-  FileText, CheckSquare, Square, Edit3
+  FileText, CheckSquare, Square, Edit3, GripVertical, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import PagePreviewModal from '../components/PagePreviewModal';
@@ -36,6 +36,26 @@ export default function MergePage() {
   const [result, setResult] = useState<{ path: string; size: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Drag-and-drop reordering state
+  const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
+
+  const handleCardDrop = (targetIdx: number) => {
+    if (draggedIdx === null || draggedIdx === targetIdx) {
+      setDraggedIdx(null);
+      setDragOverIdx(null);
+      return;
+    }
+    setFiles((prev) => {
+      const copy = [...prev];
+      const [moved] = copy.splice(draggedIdx, 1);
+      copy.splice(targetIdx, 0, moved);
+      return copy;
+    });
+    setDraggedIdx(null);
+    setDragOverIdx(null);
+  };
 
   // Preview modal
   const [previewFile, setPreviewFile] = useState<MergeItem | null>(null);
@@ -281,8 +301,34 @@ export default function MergePage() {
                 {files.map((item, index) => (
                   <div
                     key={item.id}
-                    className={`group relative bg-surface-900 rounded-xl border transition-all duration-200 flex flex-col overflow-hidden shadow-lg ${
-                      item.selected
+                    draggable
+                    onDragStart={(e) => {
+                      setDraggedIdx(index);
+                      e.dataTransfer.effectAllowed = 'move';
+                      e.dataTransfer.setData('text/plain', index.toString());
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = 'move';
+                      if (dragOverIdx !== index) setDragOverIdx(index);
+                    }}
+                    onDragLeave={() => {
+                      if (dragOverIdx === index) setDragOverIdx(null);
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      handleCardDrop(index);
+                    }}
+                    onDragEnd={() => {
+                      setDraggedIdx(null);
+                      setDragOverIdx(null);
+                    }}
+                    className={`group relative bg-surface-900 rounded-xl border transition-all duration-200 flex flex-col overflow-hidden shadow-lg cursor-grab active:cursor-grabbing select-none ${
+                      draggedIdx === index
+                        ? 'opacity-30 scale-95 border-dashed border-primary-500'
+                        : dragOverIdx === index
+                        ? 'border-primary-500 ring-4 ring-primary-500/40 scale-[1.03] z-20 shadow-2xl'
+                        : item.selected
                         ? 'border-emerald-500 ring-2 ring-emerald-500/20 shadow-emerald-500/5'
                         : 'border-surface-800 opacity-60 hover:opacity-100 hover:border-surface-700'
                     }`}
@@ -290,31 +336,64 @@ export default function MergePage() {
                     {/* Top Order Badge & Checkbox */}
                     <div className="absolute top-2 left-2 z-10 flex items-center gap-1">
                       <button
-                        onClick={() => toggleSelect(item.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleSelect(item.id);
+                        }}
                         className={`w-5 h-5 rounded-md flex items-center justify-center transition-colors shadow ${
                           item.selected
                             ? 'bg-emerald-500 text-white'
                             : 'bg-surface-800/90 text-surface-400 hover:text-white'
                         }`}
+                        title={item.selected ? 'Deselect' : 'Select'}
                       >
                         <Check className="w-3.5 h-3.5" />
                       </button>
-                      <span className="bg-surface-950/80 backdrop-blur-sm text-surface-300 text-[10px] font-bold px-1.5 py-0.5 rounded border border-surface-700">
+                      <span className="bg-surface-950/90 backdrop-blur-sm text-surface-200 text-[10px] font-bold px-1.5 py-0.5 rounded border border-surface-700 flex items-center gap-1 shadow" title="Drag to reorder sequence">
+                        <GripVertical className="w-3 h-3 text-surface-400 cursor-grab" />
                         #{index + 1}
                       </span>
                     </div>
 
-                    {/* Action Overlay Buttons (Remove & Full Preview) */}
+                    {/* Action Overlay Buttons (Reorder, Preview, Remove) */}
                     <div className="absolute top-2 right-2 z-10 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
-                        onClick={() => handleOpenPreview(item, 1)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          moveUp(index);
+                        }}
+                        disabled={index === 0}
+                        className="w-6 h-6 rounded bg-surface-800/90 text-surface-300 hover:text-white disabled:opacity-20 disabled:pointer-events-none flex items-center justify-center shadow backdrop-blur-sm"
+                        title="Move Earlier"
+                      >
+                        <ChevronLeft className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          moveDown(index);
+                        }}
+                        disabled={index === files.length - 1}
+                        className="w-6 h-6 rounded bg-surface-800/90 text-surface-300 hover:text-white disabled:opacity-20 disabled:pointer-events-none flex items-center justify-center shadow backdrop-blur-sm"
+                        title="Move Later"
+                      >
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenPreview(item, 1);
+                        }}
                         className="w-6 h-6 rounded bg-surface-800/90 text-surface-300 hover:text-white flex items-center justify-center shadow backdrop-blur-sm"
                         title="Quick Preview"
                       >
                         <Eye className="w-3.5 h-3.5" />
                       </button>
                       <button
-                        onClick={() => removeFile(item.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeFile(item.id);
+                        }}
                         className="w-6 h-6 rounded bg-red-500/80 text-white hover:bg-red-600 flex items-center justify-center shadow backdrop-blur-sm"
                         title="Remove Document"
                       >

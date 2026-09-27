@@ -162,7 +162,7 @@ export default function Navbar() {
             </button>
 
             {toolsDropdownOpen && (
-              <div className="absolute top-full left-0 mt-2 w-64 p-2 bg-surface-900/95 backdrop-blur-2xl rounded-xl border border-surface-700/80 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+              <div className="absolute top-full left-0 mt-2 w-64 p-2 bg-[#18181b] rounded-xl border border-surface-700 shadow-2xl shadow-black z-50 animate-in fade-in slide-in-from-top-2 duration-150">
                 <div className="text-[11px] font-semibold text-surface-400 px-3 py-1.5 uppercase tracking-wider">
                   Additional Tools
                 </div>
@@ -270,9 +270,9 @@ export default function Navbar() {
 
               {/* User Dropdown Menu */}
               {userMenuOpen && (
-                <div className="absolute right-0 top-full mt-2 w-72 p-2 bg-surface-900/98 backdrop-blur-2xl rounded-2xl border border-surface-700 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                <div className="absolute right-0 top-full mt-2 w-72 p-2 bg-[#18181b] rounded-2xl border border-surface-700 shadow-2xl shadow-black z-50 animate-in fade-in slide-in-from-top-2 duration-150">
                   {/* User Profile Card */}
-                  <div className="p-3 bg-surface-800/60 rounded-xl border border-surface-700/50 flex items-center gap-3 mb-2">
+                  <div className="p-3 bg-[#27272a] rounded-xl border border-surface-700 flex items-center gap-3 mb-2">
                     {user?.avatar ? (
                       <img
                         src={user.avatar}
@@ -379,10 +379,10 @@ export default function Navbar() {
 
       {/* Mobile Drawer */}
       {mobileMenuOpen && (
-        <div className="md:hidden border-t border-surface-800/90 bg-surface-950/98 backdrop-blur-2xl px-4 py-4 space-y-4 max-h-[85vh] overflow-y-auto animate-in fade-in slide-in-from-top-4 duration-200">
+        <div className="md:hidden border-t border-surface-800 bg-[#09090b] px-4 py-4 space-y-4 max-h-[85vh] overflow-y-auto animate-in fade-in slide-in-from-top-4 duration-200">
           {/* User Account Info on Mobile */}
           {isAuthenticated ? (
-            <div className="p-3 bg-surface-900 rounded-xl border border-surface-800">
+            <div className="p-3 bg-[#18181b] rounded-xl border border-surface-800">
               <div className="flex items-center gap-3 mb-3">
                 {user?.avatar ? (
                   <img
