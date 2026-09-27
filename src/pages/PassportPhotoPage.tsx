@@ -114,17 +114,19 @@ export default function PassportPhotoPage() {
   const [selectedCurvePoint, setSelectedCurvePoint] = useState<number | null>(null);
   const [histogramData, setHistogramData] = useState<number[]>(new Array(256).fill(0));
 
-  // Background Options
+  // Background Options & Smart Replacement
   const [bgColor, setBgColor] = useState<string>('#ffffff');
+  const [replaceBg, setReplaceBg] = useState<boolean>(true);
+  const [bgTolerance, setBgTolerance] = useState<number>(38); // 15 to 80
 
   // Sheet Layout & Grid Settings
   const [photoCount, setPhotoCount] = useState<number>(4); // Default to 4 photos (1 row on A4 as requested)
   const [sheetMarginMm, setSheetMarginMm] = useState<number>(12);
   const [photoGapMm, setPhotoGapMm] = useState<number>(4);
   const [showCuttingLines, setShowCuttingLines] = useState(true);
-  const [showBorder, setShowBorder] = useState(true);
-  const [borderColor] = useState('#000000');
-  const [borderWidthPx] = useState(1);
+  const [showBorder, setShowBorder] = useState<boolean>(true);
+  const [borderColor, setBorderColor] = useState<string>('#000000');
+  const [borderWidthPx, setBorderWidthPx] = useState<number>(2); // 1 to 10px (mota/patla)
 
   // Export / Print State
   const [isExporting, setIsExporting] = useState(false);
@@ -663,7 +665,7 @@ export default function PassportPhotoPage() {
       canvas.height = pixelH;
       const ctx = canvas.getContext('2d')!;
 
-      // 1. Studio Backdrop Color
+      // 1. Studio Backdrop Base
       ctx.fillStyle = bgColor;
       ctx.fillRect(0, 0, pixelW, pixelH);
 
@@ -677,9 +679,74 @@ export default function PassportPhotoPage() {
       ctx.drawImage(img, sx, sy, sw, sh, 0, 0, pixelW, pixelH);
       ctx.restore();
 
-      // 3. Pixel Shader Pipeline (Tone Curve, Contrast, Brightness, Saturation, Warmth)
+      // 3. Pixel Shader Pipeline (Tone Curve, Contrast, Brightness, Saturation, Warmth, Smart Backdrop Replace)
       const imgData = ctx.getImageData(0, 0, pixelW, pixelH);
       const data = imgData.data;
+
+      // Smart Background Color Replacement (if enabled)
+      if (replaceBg) {
+        let targetR = 255, targetG = 255, targetB = 255;
+        if (bgColor.startsWith('#')) {
+          const hex = bgColor.replace('#', '');
+          if (hex.length === 6) {
+            targetR = parseInt(hex.substring(0, 2), 16);
+            targetG = parseInt(hex.substring(2, 4), 16);
+            targetB = parseInt(hex.substring(4, 6), 16);
+          } else if (hex.length === 3) {
+            targetR = parseInt(hex[0] + hex[0], 16);
+            targetG = parseInt(hex[1] + hex[1], 16);
+            targetB = parseInt(hex[2] + hex[2], 16);
+          }
+        }
+
+        // Sample background from top corners (outside person's head)
+        let sampleSumR = 0, sampleSumG = 0, sampleSumB = 0, sampleCount = 0;
+        const cornerSize = Math.max(5, Math.min(20, Math.floor(pixelW / 12)));
+        for (let cy = 0; cy < cornerSize; cy++) {
+          for (let cx = 0; cx < cornerSize; cx++) {
+            // Top-left corner
+            const idxTL = (cy * pixelW + cx) * 4;
+            sampleSumR += data[idxTL];
+            sampleSumG += data[idxTL + 1];
+            sampleSumB += data[idxTL + 2];
+            // Top-right corner
+            const idxTR = (cy * pixelW + (pixelW - 1 - cx)) * 4;
+            sampleSumR += data[idxTR];
+            sampleSumG += data[idxTR + 1];
+            sampleSumB += data[idxTR + 2];
+            sampleCount += 2;
+          }
+        }
+        const sampleBgR = sampleCount > 0 ? sampleSumR / sampleCount : 255;
+        const sampleBgG = sampleCount > 0 ? sampleSumG / sampleCount : 255;
+        const sampleBgB = sampleCount > 0 ? sampleSumB / sampleCount : 255;
+
+        const tol = bgTolerance;
+        const feather = 16;
+
+        for (let i = 0; i < data.length; i += 4) {
+          const r = data[i];
+          const g = data[i + 1];
+          const b = data[i + 2];
+
+          // Euclidean distance in RGB color space
+          const dist = Math.sqrt(
+            (r - sampleBgR) * (r - sampleBgR) +
+            (g - sampleBgG) * (g - sampleBgG) +
+            (b - sampleBgB) * (b - sampleBgB)
+          );
+
+          if (dist < tol) {
+            const blendFactor = dist < (tol - feather)
+              ? 1
+              : Math.max(0, Math.min(1, (tol - dist) / feather));
+
+            data[i] = Math.round(targetR * blendFactor + r * (1 - blendFactor));
+            data[i + 1] = Math.round(targetG * blendFactor + g * (1 - blendFactor));
+            data[i + 2] = Math.round(targetB * blendFactor + b * (1 - blendFactor));
+          }
+        }
+      }
 
       const hist = new Array(256).fill(0);
       const bFactor = brightness * 1.5;
@@ -756,8 +823,8 @@ export default function PassportPhotoPage() {
         ctx.putImageData(sData, 0, 0);
       }
 
-      // 5. Border
-      if (showBorder) {
+      // 5. Border (Mota / Patla Thickness & Color)
+      if (showBorder && borderWidthPx > 0) {
         ctx.strokeStyle = borderColor;
         ctx.lineWidth = borderWidthPx * 2;
         ctx.strokeRect(0, 0, pixelW, pixelH);
@@ -770,7 +837,7 @@ export default function PassportPhotoPage() {
   }, [
     sourceImage, photoWidthMm, photoHeightMm, cropBox,
     brightness, contrast, clarity, warmth, saturation, curveLut,
-    bgColor, showBorder, borderColor, borderWidthPx
+    bgColor, replaceBg, bgTolerance, showBorder, borderColor, borderWidthPx
   ]);
 
   // ─── Sheet Grid Calculations ─────────────────────────────────────
@@ -1788,13 +1855,48 @@ export default function PassportPhotoPage() {
                   </div>
                 </div>
 
-                {/* Fine Adjustment Sliders */}
-                <div className="space-y-3">
-                  {/* Clarity / Sharpness */}
+                {/* ─── Prominent Photo Clarity & Polish Tool ─── */}
+                <div className="bg-gradient-to-r from-primary-950/60 to-surface-900 border border-primary-500/40 rounded-xl p-3 shadow-lg">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <Sparkles className="w-4 h-4 text-amber-400" />
+                      <span className="text-xs font-bold text-white">Photo Clarity &amp; Detail Sharpener</span>
+                    </div>
+                    <span className="text-[10px] text-amber-300 font-mono font-bold bg-amber-500/20 px-1.5 py-0.5 rounded">
+                      HD Clear
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-surface-300 mb-2.5 leading-relaxed">
+                    Dhundhli (soft/blurry) photo ko 1-click me sharp aur crystal-clear studio quality banayein:
+                  </p>
+                  <div className="flex gap-2 mb-3">
+                    <button
+                      onClick={() => {
+                        setClarity(55);
+                        setContrast(12);
+                        setBrightness(6);
+                      }}
+                      className="flex-1 btn-primary text-xs py-1.5 flex items-center justify-center gap-1.5 shadow-md shadow-primary-500/20"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                      <span>✨ Auto Clear &amp; Polish Photo</span>
+                    </button>
+                    <button
+                      onClick={() => { setClarity(0); setContrast(0); setBrightness(0); }}
+                      className="btn-secondary text-xs px-2.5 py-1.5 text-surface-400 hover:text-white"
+                      title="Reset clarity & contrast"
+                    >
+                      Reset
+                    </button>
+                  </div>
+
+                  {/* Clarity Slider */}
                   <div>
                     <div className="flex justify-between text-xs mb-1">
-                      <span className="text-surface-300 font-medium">Clarity &amp; Sharpness</span>
-                      <span className="font-mono text-primary-400">{clarity}%</span>
+                      <span className="text-surface-300 font-medium">Clarity &amp; Sharpness Level</span>
+                      <span className="font-mono text-primary-400 font-bold">
+                        {clarity}% · {clarity === 0 ? 'Original' : clarity <= 30 ? 'Clear' : clarity <= 60 ? 'HD Sharp' : 'Ultra Crisp'}
+                      </span>
                     </div>
                     <input
                       type="range"
@@ -1804,8 +1906,31 @@ export default function PassportPhotoPage() {
                       onChange={(e) => setClarity(parseInt(e.target.value))}
                       className="w-full accent-primary-500"
                     />
+                    <div className="grid grid-cols-4 gap-1.5 mt-2">
+                      {[
+                        { label: 'Off (0%)', val: 0 },
+                        { label: 'Soft (25%)', val: 25 },
+                        { label: 'Clear (50%)', val: 50 },
+                        { label: 'Ultra (75%)', val: 75 },
+                      ].map((item) => (
+                        <button
+                          key={item.val}
+                          onClick={() => setClarity(item.val)}
+                          className={`py-1 text-[10px] font-bold rounded border transition-colors ${
+                            clarity === item.val
+                              ? 'bg-primary-600 border-primary-500 text-white'
+                              : 'bg-surface-900 border-surface-700 text-surface-400 hover:text-white'
+                          }`}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
+                </div>
 
+                {/* Fine Adjustment Sliders */}
+                <div className="space-y-3">
                   {/* Brightness */}
                   <div>
                     <div className="flex justify-between text-xs mb-1">
@@ -1879,13 +2004,29 @@ export default function PassportPhotoPage() {
               </div>
             )}
 
-            {/* ─── TAB 3: Backdrop Replacement ───────────────── */}
+            {/* ─── TAB 3: Backdrop & Border Replacement ─────── */}
             {inspectorTab === 'background' && (
-              <div className="space-y-4">
-                <div>
-                  <label className="text-xs font-bold text-white block mb-1">Uniform Backdrop Color</label>
-                  <p className="text-[11px] text-surface-400 mb-3">
-                    Select official government backdrop color required for your passport or visa:
+              <div className="space-y-5">
+                {/* 1. Backdrop Color & Auto-Replacement */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-white flex items-center gap-1.5">
+                      <Palette className="w-3.5 h-3.5 text-primary-400" />
+                      <span>Photo Background Color</span>
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer text-[11px] text-surface-300">
+                      <input
+                        type="checkbox"
+                        checked={replaceBg}
+                        onChange={(e) => setReplaceBg(e.target.checked)}
+                        className="rounded accent-primary-500 cursor-pointer"
+                      />
+                      <span>Auto Replace</span>
+                    </label>
+                  </div>
+
+                  <p className="text-[11px] text-surface-400">
+                    Official passport/visa backdrop color chunein. Auto-keying photo background ko replace kar dega:
                   </p>
 
                   <div className="grid grid-cols-2 gap-2">
@@ -1893,19 +2034,24 @@ export default function PassportPhotoPage() {
                       { name: 'Pure White', color: '#ffffff', desc: 'Standard India / US' },
                       { name: 'Studio Light Blue', color: '#bfdbfe', desc: 'Classic Passport' },
                       { name: 'Soft Grey', color: '#f1f5f9', desc: 'Europe / Schengen' },
-                      { name: 'Off-White', color: '#fafaf9', desc: 'UK / Canada' },
+                      { name: 'Warm Off-White', color: '#fafaf9', desc: 'UK / Canada' },
+                      { name: 'Light Red', color: '#fca5a5', desc: 'Asian Passport' },
+                      { name: 'Royal Blue', color: '#93c5fd', desc: 'Official Studio' },
                     ].map((item) => (
                       <button
                         key={item.color}
-                        onClick={() => setBgColor(item.color)}
+                        onClick={() => {
+                          setBgColor(item.color);
+                          setReplaceBg(true);
+                        }}
                         className={`p-2.5 rounded-lg border text-left flex items-center gap-2.5 transition-all ${
-                          bgColor === item.color
+                          bgColor === item.color && replaceBg
                             ? 'border-primary-500 bg-primary-500/10 text-white ring-1 ring-primary-500'
-                            : 'border-surface-800 bg-surface-850 text-surface-300 hover:border-surface-700'
+                            : 'border-surface-700 bg-surface-800 text-surface-300 hover:border-surface-600'
                         }`}
                       >
                         <div
-                          className="w-6 h-6 rounded-full border border-surface-600 shadow-sm shrink-0"
+                          className="w-5 h-5 rounded-full border border-surface-600 shadow-sm shrink-0"
                           style={{ backgroundColor: item.color }}
                         />
                         <div className="truncate">
@@ -1915,40 +2061,164 @@ export default function PassportPhotoPage() {
                       </button>
                     ))}
                   </div>
-                </div>
 
-                <div>
-                  <label className="text-xs font-bold text-white block mb-1.5">Custom Color</label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="color"
-                      value={bgColor}
-                      onChange={(e) => setBgColor(e.target.value)}
-                      className="w-9 h-9 rounded cursor-pointer bg-transparent border border-surface-700"
-                    />
-                    <input
-                      type="text"
-                      value={bgColor}
-                      onChange={(e) => setBgColor(e.target.value)}
-                      className="input-sm text-xs font-mono w-28 bg-surface-800 text-white rounded"
-                    />
-                  </div>
+                  {/* Keep Original Background option */}
+                  <button
+                    onClick={() => setReplaceBg(false)}
+                    className={`w-full py-1.5 px-3 rounded-lg border text-xs font-medium flex items-center justify-center gap-2 transition-all ${
+                      !replaceBg
+                        ? 'border-amber-500 bg-amber-500/15 text-amber-300 ring-1 ring-amber-500'
+                        : 'border-surface-700 bg-surface-800 text-surface-400 hover:text-white'
+                    }`}
+                  >
+                    <span>📷 Keep Original Photo Background (No Replace)</span>
+                  </button>
+
+                  {/* Custom Color & Sensitivity */}
+                  {replaceBg && (
+                    <div className="bg-surface-800/80 p-3 rounded-lg border border-surface-700/80 space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-surface-200">Custom Background Color:</span>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="color"
+                            value={bgColor}
+                            onChange={(e) => {
+                              setBgColor(e.target.value);
+                              setReplaceBg(true);
+                            }}
+                            className="w-7 h-7 rounded cursor-pointer bg-transparent border border-surface-600"
+                          />
+                          <input
+                            type="text"
+                            value={bgColor}
+                            onChange={(e) => {
+                              setBgColor(e.target.value);
+                              setReplaceBg(true);
+                            }}
+                            className="text-xs font-mono w-20 px-1.5 py-1 bg-surface-900 text-white rounded border border-surface-700 text-center"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="flex justify-between text-[11px] mb-1">
+                          <span className="text-surface-300 font-medium">Background Detection Sensitivity (Edge Tolerance)</span>
+                          <span className="font-mono text-primary-400 font-bold">{bgTolerance}</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="15"
+                          max="80"
+                          value={bgTolerance}
+                          onChange={(e) => setBgTolerance(parseInt(e.target.value))}
+                          className="w-full accent-primary-500"
+                        />
+                        <div className="flex justify-between text-[10px] text-surface-500">
+                          <span>Low (Hair safe)</span>
+                          <span>High (Clean background)</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="h-px bg-surface-800" />
 
-                {/* Photo Thin Border */}
-                <div className="flex items-center justify-between">
-                  <div>
-                    <label className="text-xs font-bold text-white block">Thin Cutting Border</label>
-                    <span className="text-[10px] text-surface-400">0.5mm clean border for scissor cutting</span>
+                {/* 2. Photo Border Tool (Mota / Patla & Color) */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <label className="text-xs font-bold text-white block">Photo Border (Cutting Frame)</label>
+                      <span className="text-[10px] text-surface-400">Photo ke kinare par border lagayein</span>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={showBorder}
+                        onChange={(e) => setShowBorder(e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-9 h-5 bg-surface-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary-600"></div>
+                    </label>
                   </div>
-                  <input
-                    type="checkbox"
-                    checked={showBorder}
-                    onChange={(e) => setShowBorder(e.target.checked)}
-                    className="rounded accent-primary-500"
-                  />
+
+                  {showBorder && (
+                    <div className="bg-surface-800/80 p-3 rounded-lg border border-surface-700/80 space-y-3 animate-fade-in">
+                      {/* Border Thickness (Mota / Patla) */}
+                      <div>
+                        <div className="flex justify-between text-xs mb-1">
+                          <span className="text-surface-300 font-medium">Border Thickness (Mota / Patla)</span>
+                          <span className="font-mono text-primary-400 font-bold">
+                            {borderWidthPx}px · {borderWidthPx <= 1 ? 'Patla' : borderWidthPx <= 3 ? 'Medium' : borderWidthPx <= 5 ? 'Mota' : 'Extra Mota'}
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min="1"
+                          max="10"
+                          value={borderWidthPx}
+                          onChange={(e) => setBorderWidthPx(parseInt(e.target.value))}
+                          className="w-full accent-primary-500"
+                        />
+                        <div className="grid grid-cols-4 gap-1.5 mt-2">
+                          {[
+                            { label: 'Patla (1px)', w: 1 },
+                            { label: 'Normal (2px)', w: 2 },
+                            { label: 'Mota (4px)', w: 4 },
+                            { label: 'Heavy (6px)', w: 6 },
+                          ].map((item) => (
+                            <button
+                              key={item.w}
+                              onClick={() => setBorderWidthPx(item.w)}
+                              className={`py-1 text-[10px] font-bold rounded border transition-colors ${
+                                borderWidthPx === item.w
+                                  ? 'bg-primary-600 border-primary-500 text-white'
+                                  : 'bg-surface-900 border-surface-700 text-surface-400 hover:text-white'
+                              }`}
+                            >
+                              {item.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Border Color */}
+                      <div>
+                        <span className="text-[11px] font-medium text-surface-300 block mb-1.5">Border Color:</span>
+                        <div className="flex items-center gap-2">
+                          {[
+                            { color: '#000000', name: 'Black' },
+                            { color: '#334155', name: 'Charcoal' },
+                            { color: '#94a3b8', name: 'Gray' },
+                            { color: '#ffffff', name: 'White' },
+                            { color: '#1e3a8a', name: 'Navy' },
+                          ].map((c) => (
+                            <button
+                              key={c.color}
+                              onClick={() => setBorderColor(c.color)}
+                              className={`w-6 h-6 rounded-full border transition-transform ${
+                                borderColor === c.color
+                                  ? 'ring-2 ring-primary-500 scale-110 border-white'
+                                  : 'border-surface-600 hover:scale-105'
+                              }`}
+                              style={{ backgroundColor: c.color }}
+                              title={c.name}
+                            />
+                          ))}
+                          <div className="h-4 w-px bg-surface-700 mx-1" />
+                          <input
+                            type="color"
+                            value={borderColor}
+                            onChange={(e) => setBorderColor(e.target.value)}
+                            className="w-6 h-6 rounded cursor-pointer bg-transparent border border-surface-600"
+                            title="Custom Border Color"
+                          />
+                          <span className="text-[10px] font-mono text-surface-400 uppercase">{borderColor}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -1965,7 +2235,7 @@ export default function PassportPhotoPage() {
                       const p = PAPER_SIZES.find((item) => item.id === e.target.value);
                       if (p) setSelectedPaper(p);
                     }}
-                    className="w-full text-xs py-2 px-2.5 bg-surface-850 border border-surface-750 text-white rounded-lg outline-none focus:border-primary-500 font-medium cursor-pointer"
+                    className="w-full text-xs py-2 px-2.5 bg-surface-800 border border-surface-700 text-white rounded-lg outline-none focus:border-primary-500 font-medium cursor-pointer"
                   >
                     {PAPER_SIZES.map((paper) => (
                       <option key={paper.id} value={paper.id} className="bg-surface-900 text-white">
@@ -1973,6 +2243,118 @@ export default function PassportPhotoPage() {
                       </option>
                     ))}
                   </select>
+                </div>
+
+                {/* Photo Quality, Border & Backdrop Quick Controls */}
+                <div className="bg-surface-800/90 border border-surface-700 rounded-xl p-3 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                      <Sliders className="w-3.5 h-3.5 text-primary-400" />
+                      <span>Photo Tools (Border, Clear &amp; Backdrop)</span>
+                    </span>
+                    <button
+                      onClick={() => {
+                        setClarity(55);
+                        setContrast(12);
+                        setBrightness(6);
+                      }}
+                      className="text-[10px] px-2 py-0.5 rounded bg-primary-600/30 text-primary-300 border border-primary-500/40 hover:bg-primary-600/50 flex items-center gap-1 font-bold transition-colors"
+                      title="1-Click Auto Sharpen & Enhance Face"
+                    >
+                      <Sparkles className="w-3 h-3 text-amber-300" />
+                      <span>✨ Auto Clear</span>
+                    </button>
+                  </div>
+
+                  {/* Quick Border Controls */}
+                  <div className="space-y-1.5 pt-2 border-t border-surface-700/60">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs text-surface-200 font-medium cursor-pointer flex items-center gap-1.5">
+                        <input
+                          type="checkbox"
+                          checked={showBorder}
+                          onChange={(e) => setShowBorder(e.target.checked)}
+                          className="rounded accent-primary-500 cursor-pointer"
+                        />
+                        <span>Border (Kinara Frame):</span>
+                      </label>
+                      {showBorder && (
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="color"
+                            value={borderColor}
+                            onChange={(e) => setBorderColor(e.target.value)}
+                            className="w-5 h-5 rounded cursor-pointer bg-transparent border border-surface-600 shrink-0"
+                            title="Border Color"
+                          />
+                          <span className="text-[10px] font-mono text-primary-400 font-bold">{borderWidthPx}px</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {showBorder && (
+                      <div className="flex items-center gap-1.5 pt-1">
+                        {[
+                          { label: 'Patla (1px)', w: 1 },
+                          { label: 'Normal (2px)', w: 2 },
+                          { label: 'Mota (4px)', w: 4 },
+                          { label: 'Heavy (6px)', w: 6 },
+                        ].map((item) => (
+                          <button
+                            key={item.w}
+                            onClick={() => setBorderWidthPx(item.w)}
+                            className={`flex-1 py-1 text-[10px] font-bold rounded border transition-colors ${
+                              borderWidthPx === item.w
+                                ? 'bg-primary-600 border-primary-500 text-white'
+                                : 'bg-surface-900 border-surface-700 text-surface-400 hover:text-white'
+                            }`}
+                          >
+                            {item.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Quick Backdrop Swatches */}
+                  <div className="flex items-center justify-between gap-2 pt-2 border-t border-surface-700/60">
+                    <span className="text-[11px] text-surface-300 font-medium">Backdrop Color:</span>
+                    <div className="flex items-center gap-1.5">
+                      {[
+                        { color: '#ffffff', name: 'White' },
+                        { color: '#bfdbfe', name: 'Light Blue' },
+                        { color: '#f1f5f9', name: 'Europe Grey' },
+                        { color: '#fafaf9', name: 'Off-White' },
+                        { color: '#fca5a5', name: 'Red' },
+                      ].map((item) => (
+                        <button
+                          key={item.color}
+                          onClick={() => {
+                            setBgColor(item.color);
+                            setReplaceBg(true);
+                          }}
+                          className={`w-5 h-5 rounded-full border transition-transform ${
+                            bgColor === item.color && replaceBg
+                              ? 'ring-2 ring-primary-500 scale-110 border-white'
+                              : 'border-surface-600 hover:scale-105'
+                          }`}
+                          style={{ backgroundColor: item.color }}
+                          title={item.name}
+                        />
+                      ))}
+                      <button
+                        onClick={() => setReplaceBg(false)}
+                        className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors ${
+                          !replaceBg
+                            ? 'bg-amber-500/20 border-amber-500 text-amber-300 font-bold'
+                            : 'bg-surface-900 border-surface-700 text-surface-400'
+                        }`}
+                        title="Original Photo Background"
+                      >
+                        Original
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Auto-Fit Information Banner */}
@@ -2000,7 +2382,7 @@ export default function PassportPhotoPage() {
                     className={`w-full p-2.5 rounded-lg border text-left flex items-center justify-between transition-all ${
                       photoCount === 1
                         ? 'border-amber-500 bg-amber-500/15 text-white ring-1 ring-amber-500 shadow-md shadow-amber-500/10'
-                        : 'border-surface-800 bg-surface-850 text-surface-300 hover:border-surface-700'
+                        : 'border-surface-700 bg-surface-800 text-surface-300 hover:border-surface-600'
                     }`}
                   >
                     <div className="flex items-center gap-2.5">
@@ -2022,7 +2404,7 @@ export default function PassportPhotoPage() {
                       className={`p-2.5 rounded-lg border text-left transition-all ${
                         photoCount === maxCols && photoCount !== 1
                           ? 'border-primary-500 bg-primary-500/10 text-white ring-1 ring-primary-500'
-                          : 'border-surface-800 bg-surface-850 text-surface-300 hover:border-surface-700'
+                          : 'border-surface-700 bg-surface-800 text-surface-300 hover:border-surface-600'
                       }`}
                     >
                       <div className="text-xs font-bold">1 Line ({maxCols} Photos)</div>
@@ -2034,7 +2416,7 @@ export default function PassportPhotoPage() {
                       className={`p-2.5 rounded-lg border text-left transition-all ${
                         photoCount === Math.min(2 * maxCols, maxPhotosOnSheet) && photoCount !== maxCols && photoCount !== 1
                           ? 'border-primary-500 bg-primary-500/10 text-white ring-1 ring-primary-500'
-                          : 'border-surface-800 bg-surface-850 text-surface-300 hover:border-surface-700'
+                          : 'border-surface-700 bg-surface-800 text-surface-300 hover:border-surface-600'
                       }`}
                     >
                       <div className="text-xs font-bold">2 Lines ({Math.min(2 * maxCols, maxPhotosOnSheet)} Photos)</div>
@@ -2046,7 +2428,7 @@ export default function PassportPhotoPage() {
                       className={`p-2.5 rounded-lg border text-left transition-all ${
                         photoCount === Math.min(3 * maxCols, maxPhotosOnSheet) && photoCount !== Math.min(2 * maxCols, maxPhotosOnSheet) && photoCount !== maxPhotosOnSheet && photoCount !== 1
                           ? 'border-primary-500 bg-primary-500/10 text-white ring-1 ring-primary-500'
-                          : 'border-surface-800 bg-surface-850 text-surface-300 hover:border-surface-700'
+                          : 'border-surface-700 bg-surface-800 text-surface-300 hover:border-surface-600'
                       }`}
                     >
                       <div className="text-xs font-bold">3 Lines ({Math.min(3 * maxCols, maxPhotosOnSheet)} Photos)</div>
@@ -2058,7 +2440,7 @@ export default function PassportPhotoPage() {
                       className={`p-2.5 rounded-lg border text-left transition-all ${
                         photoCount === maxPhotosOnSheet && maxPhotosOnSheet > 1 && photoCount !== maxCols && photoCount !== Math.min(2 * maxCols, maxPhotosOnSheet) && photoCount !== Math.min(3 * maxCols, maxPhotosOnSheet)
                           ? 'border-primary-500 bg-primary-500/10 text-white ring-1 ring-primary-500'
-                          : 'border-surface-800 bg-surface-850 text-surface-300 hover:border-surface-700'
+                          : 'border-surface-700 bg-surface-800 text-surface-300 hover:border-surface-600'
                       }`}
                     >
                       <div className="text-xs font-bold">Full Sheet ({maxPhotosOnSheet} Photos)</div>
