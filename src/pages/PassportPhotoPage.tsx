@@ -87,6 +87,7 @@ export default function PassportPhotoPage() {
   // Mode: Crop & Enhance vs Sheet Layout
   const [activeTab, setActiveTab] = useState<'edit' | 'sheet'>('edit');
   const [inspectorTab, setInspectorTab] = useState<'crop_size' | 'photoshop' | 'background' | 'grid'>('crop_size');
+  const [editViewMode, setEditViewMode] = useState<'crop' | 'preview'>('crop');
 
   // Interactive Aspect-Ratio Crop State (Normalized 0..1)
   const [cropBox, setCropBox] = useState<NormalizedRect>({ x: 0.1, y: 0.1, w: 0.8, h: 0.8 });
@@ -117,7 +118,7 @@ export default function PassportPhotoPage() {
   // Background Options & Smart Replacement
   const [bgColor, setBgColor] = useState<string>('#ffffff');
   const [replaceBg, setReplaceBg] = useState<boolean>(true);
-  const [bgTolerance, setBgTolerance] = useState<number>(38); // 15 to 80
+  const [bgTolerance, setBgTolerance] = useState<number>(55); // 15 to 120 sensitivity
 
   // Sheet Layout & Grid Settings
   const [photoCount, setPhotoCount] = useState<number>(4); // Default to 4 photos (1 row on A4 as requested)
@@ -654,8 +655,8 @@ export default function PassportPhotoPage() {
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
-      const canvas = editCanvasRef.current;
-      if (!canvas) return;
+      // Use editCanvasRef if mounted, otherwise create offscreen canvas so Sheet view updates in real-time
+      const canvas = editCanvasRef.current || document.createElement('canvas');
 
       const pxPerMm = 11.811; // 300 DPI
       const pixelW = Math.round(photoWidthMm * pxPerMm);
@@ -679,74 +680,9 @@ export default function PassportPhotoPage() {
       ctx.drawImage(img, sx, sy, sw, sh, 0, 0, pixelW, pixelH);
       ctx.restore();
 
-      // 3. Pixel Shader Pipeline (Tone Curve, Contrast, Brightness, Saturation, Warmth, Smart Backdrop Replace)
+      // 3. Pixel Shader Pipeline (Tone Curve, Contrast, Brightness, Saturation, Warmth)
       const imgData = ctx.getImageData(0, 0, pixelW, pixelH);
       const data = imgData.data;
-
-      // Smart Background Color Replacement (if enabled)
-      if (replaceBg) {
-        let targetR = 255, targetG = 255, targetB = 255;
-        if (bgColor.startsWith('#')) {
-          const hex = bgColor.replace('#', '');
-          if (hex.length === 6) {
-            targetR = parseInt(hex.substring(0, 2), 16);
-            targetG = parseInt(hex.substring(2, 4), 16);
-            targetB = parseInt(hex.substring(4, 6), 16);
-          } else if (hex.length === 3) {
-            targetR = parseInt(hex[0] + hex[0], 16);
-            targetG = parseInt(hex[1] + hex[1], 16);
-            targetB = parseInt(hex[2] + hex[2], 16);
-          }
-        }
-
-        // Sample background from top corners (outside person's head)
-        let sampleSumR = 0, sampleSumG = 0, sampleSumB = 0, sampleCount = 0;
-        const cornerSize = Math.max(5, Math.min(20, Math.floor(pixelW / 12)));
-        for (let cy = 0; cy < cornerSize; cy++) {
-          for (let cx = 0; cx < cornerSize; cx++) {
-            // Top-left corner
-            const idxTL = (cy * pixelW + cx) * 4;
-            sampleSumR += data[idxTL];
-            sampleSumG += data[idxTL + 1];
-            sampleSumB += data[idxTL + 2];
-            // Top-right corner
-            const idxTR = (cy * pixelW + (pixelW - 1 - cx)) * 4;
-            sampleSumR += data[idxTR];
-            sampleSumG += data[idxTR + 1];
-            sampleSumB += data[idxTR + 2];
-            sampleCount += 2;
-          }
-        }
-        const sampleBgR = sampleCount > 0 ? sampleSumR / sampleCount : 255;
-        const sampleBgG = sampleCount > 0 ? sampleSumG / sampleCount : 255;
-        const sampleBgB = sampleCount > 0 ? sampleSumB / sampleCount : 255;
-
-        const tol = bgTolerance;
-        const feather = 16;
-
-        for (let i = 0; i < data.length; i += 4) {
-          const r = data[i];
-          const g = data[i + 1];
-          const b = data[i + 2];
-
-          // Euclidean distance in RGB color space
-          const dist = Math.sqrt(
-            (r - sampleBgR) * (r - sampleBgR) +
-            (g - sampleBgG) * (g - sampleBgG) +
-            (b - sampleBgB) * (b - sampleBgB)
-          );
-
-          if (dist < tol) {
-            const blendFactor = dist < (tol - feather)
-              ? 1
-              : Math.max(0, Math.min(1, (tol - dist) / feather));
-
-            data[i] = Math.round(targetR * blendFactor + r * (1 - blendFactor));
-            data[i + 1] = Math.round(targetG * blendFactor + g * (1 - blendFactor));
-            data[i + 2] = Math.round(targetB * blendFactor + b * (1 - blendFactor));
-          }
-        }
-      }
 
       const hist = new Array(256).fill(0);
       const bFactor = brightness * 1.5;
@@ -788,9 +724,185 @@ export default function PassportPhotoPage() {
         hist[Math.max(0, Math.min(255, lum))]++;
       }
 
+      // 4. Smart Photo Background Replacement (Corner-Sampled BFS Flood-Fill with Horizontal Gradient Interpolation)
+      if (replaceBg) {
+        let targetR = 255, targetG = 255, targetB = 255;
+        if (bgColor.startsWith('#')) {
+          const hex = bgColor.replace('#', '');
+          if (hex.length === 6) {
+            targetR = parseInt(hex.substring(0, 2), 16);
+            targetG = parseInt(hex.substring(2, 4), 16);
+            targetB = parseInt(hex.substring(4, 6), 16);
+          } else if (hex.length === 3) {
+            targetR = parseInt(hex[0] + hex[0], 16);
+            targetG = parseInt(hex[1] + hex[1], 16);
+            targetB = parseInt(hex[2] + hex[2], 16);
+          }
+        }
+
+        // Sample background from Top-Left and Top-Right corners (safely outside center head/hair)
+        const cornerW = Math.max(10, Math.floor(pixelW * 0.16));
+        const cornerH = Math.max(10, Math.floor(pixelH * 0.16));
+
+        let sumRL = 0, sumGL = 0, sumBL = 0, countL = 0;
+        let sumRR = 0, sumGR = 0, sumBR = 0, countR = 0;
+
+        for (let y = 0; y < cornerH; y++) {
+          for (let x = 0; x < cornerW; x++) {
+            const idxL = (y * pixelW + x) * 4;
+            if (data[idxL + 3] >= 200) {
+              sumRL += data[idxL];
+              sumGL += data[idxL + 1];
+              sumBL += data[idxL + 2];
+              countL++;
+            }
+
+            const rX = pixelW - 1 - x;
+            const idxR = (y * pixelW + rX) * 4;
+            if (data[idxR + 3] >= 200) {
+              sumRR += data[idxR];
+              sumGR += data[idxR + 1];
+              sumBR += data[idxR + 2];
+              countR++;
+            }
+          }
+        }
+
+        const bgRL = countL > 0 ? sumRL / countL : 240;
+        const bgGL = countL > 0 ? sumGL / countL : 240;
+        const bgBL = countL > 0 ? sumBL / countL : 240;
+
+        const bgRR = countR > 0 ? sumRR / countR : bgRL;
+        const bgGR = countR > 0 ? sumGR / countR : bgGL;
+        const bgBR = countR > 0 ? sumBR / countR : bgBL;
+
+        const totalPixels = pixelW * pixelH;
+        const isBackdrop = new Uint8Array(totalPixels);
+        const visited = new Uint8Array(totalPixels);
+        const queue: number[] = [];
+
+        const tol = bgTolerance;
+        const tolSq = tol * tol;
+
+        // Seed queue from top corners
+        for (let y = 0; y < cornerH; y++) {
+          for (let x = 0; x < cornerW; x++) {
+            const idxL = y * pixelW + x;
+            const pL = idxL * 4;
+            if (data[pL + 3] < 200) {
+              isBackdrop[idxL] = 1;
+              visited[idxL] = 1;
+              queue.push(idxL);
+            } else {
+              const dr = data[pL] - bgRL;
+              const dg = data[pL + 1] - bgGL;
+              const db = data[pL + 2] - bgBL;
+              if (dr * dr + dg * dg + db * db <= tolSq) {
+                isBackdrop[idxL] = 1;
+                visited[idxL] = 1;
+                queue.push(idxL);
+              }
+            }
+
+            const rX = pixelW - 1 - x;
+            const idxR = y * pixelW + rX;
+            const pR = idxR * 4;
+            if (data[pR + 3] < 200) {
+              isBackdrop[idxR] = 1;
+              visited[idxR] = 1;
+              queue.push(idxR);
+            } else {
+              const dr = data[pR] - bgRR;
+              const dg = data[pR + 1] - bgGR;
+              const db = data[pR + 2] - bgBR;
+              if (dr * dr + dg * dg + db * db <= tolSq) {
+                isBackdrop[idxR] = 1;
+                visited[idxR] = 1;
+                queue.push(idxR);
+              }
+            }
+          }
+        }
+
+        // BFS expansion across background
+        let head = 0;
+        while (head < queue.length) {
+          const curr = queue[head++];
+          const cx = curr % pixelW;
+          const cy = Math.floor(curr / pixelW);
+
+          // 4-way connected neighbors
+          const up = cy > 0 ? curr - pixelW : -1;
+          const down = cy < pixelH - 1 ? curr + pixelW : -1;
+          const left = cx > 0 ? curr - 1 : -1;
+          const right = cx < pixelW - 1 ? curr + 1 : -1;
+
+          const neighbors = [up, down, left, right];
+          for (let k = 0; k < 4; k++) {
+            const n = neighbors[k];
+            if (n !== -1 && !visited[n]) {
+              visited[n] = 1;
+              const nIdx = n * 4;
+
+              // Transparent pixel is always background
+              if (data[nIdx + 3] < 200) {
+                isBackdrop[n] = 1;
+                queue.push(n);
+                continue;
+              }
+
+              const nx = n % pixelW;
+              const t = nx / pixelW;
+              const expR = bgRL * (1 - t) + bgRR * t;
+              const expG = bgGL * (1 - t) + bgGR * t;
+              const expB = bgBL * (1 - t) + bgBR * t;
+
+              const dr = data[nIdx] - expR;
+              const dg = data[nIdx + 1] - expG;
+              const db = data[nIdx + 2] - expB;
+
+              if (dr * dr + dg * dg + db * db <= tolSq) {
+                isBackdrop[n] = 1;
+                queue.push(n);
+              }
+            }
+          }
+        }
+
+        // Apply smooth color replacement with edge feathering
+        for (let i = 0; i < totalPixels; i++) {
+          if (isBackdrop[i]) {
+            const pIdx = i * 4;
+            const cx = i % pixelW;
+            const cy = Math.floor(i / pixelW);
+
+            // Check if boundary pixel next to portrait foreground
+            const isBorder = (
+              (cx > 0 && !isBackdrop[i - 1]) ||
+              (cx < pixelW - 1 && !isBackdrop[i + 1]) ||
+              (cy > 0 && !isBackdrop[i - pixelW]) ||
+              (cy < pixelH - 1 && !isBackdrop[i + pixelW])
+            );
+
+            if (isBorder && data[pIdx + 3] >= 200) {
+              // Soft feather blend (70% target color, 30% original anti-aliased edge)
+              data[pIdx] = Math.round(targetR * 0.7 + data[pIdx] * 0.3);
+              data[pIdx + 1] = Math.round(targetG * 0.7 + data[pIdx + 1] * 0.3);
+              data[pIdx + 2] = Math.round(targetB * 0.7 + data[pIdx + 2] * 0.3);
+              data[pIdx + 3] = 255;
+            } else {
+              data[pIdx] = targetR;
+              data[pIdx + 1] = targetG;
+              data[pIdx + 2] = targetB;
+              data[pIdx + 3] = 255;
+            }
+          }
+        }
+      }
+
       ctx.putImageData(imgData, 0, 0);
 
-      // 4. Clarity / High-Pass Sharpness Filter (Convolution)
+      // 5. Clarity / High-Pass Sharpness Filter (Convolution)
       if (clarity > 0) {
         const sharpCanvas = document.createElement('canvas');
         sharpCanvas.width = pixelW;
@@ -803,7 +915,7 @@ export default function PassportPhotoPage() {
         const dst = sData.data;
         const w = pixelW;
         const h = pixelH;
-        const strength = (clarity / 100) * 0.7;
+        const strength = (clarity / 100) * 0.75;
 
         for (let y = 1; y < h - 1; y++) {
           for (let x = 1; x < w - 1; x++) {
@@ -823,11 +935,13 @@ export default function PassportPhotoPage() {
         ctx.putImageData(sData, 0, 0);
       }
 
-      // 5. Border (Mota / Patla Thickness & Color)
+      // 6. Border (Mota / Patla Thickness & Color - Scaled to 300 DPI with zero-clipping inset)
       if (showBorder && borderWidthPx > 0) {
+        const strokeThickness = Math.max(2, Math.round(borderWidthPx * 3.8));
         ctx.strokeStyle = borderColor;
-        ctx.lineWidth = borderWidthPx * 2;
-        ctx.strokeRect(0, 0, pixelW, pixelH);
+        ctx.lineWidth = strokeThickness;
+        const half = strokeThickness / 2;
+        ctx.strokeRect(half, half, pixelW - strokeThickness, pixelH - strokeThickness);
       }
 
       setHistogramData(hist);
@@ -1087,8 +1201,8 @@ export default function PassportPhotoPage() {
   };
 
   const handleDownloadSinglePhoto = () => {
-    if (!editCanvasRef.current) return;
-    const url = editCanvasRef.current.toDataURL('image/jpeg', 0.85);
+    const url = processedPhotoDataUrl || editCanvasRef.current?.toDataURL('image/jpeg', 0.95);
+    if (!url) return;
     const a = document.createElement('a');
     a.href = url;
     a.download = `Passport_Photo_${photoWidthMm}x${photoHeightMm}mm.jpg`;
@@ -1105,7 +1219,7 @@ export default function PassportPhotoPage() {
       {/* ─── Persistent Global Navbar (Always Visible) ─────── */}
       <Navbar />
 
-      {/* Hidden File Input */}
+      {/* Hidden File Input & Offscreen Processing Canvas */}
       <input
         id="passport-photo-upload-input"
         ref={fileInputRef}
@@ -1114,6 +1228,7 @@ export default function PassportPhotoPage() {
         className="hidden"
         onChange={handleFileInputChange}
       />
+      <canvas ref={editCanvasRef} className="hidden" />
 
       {/* ─── Drag & Drop Overlay Indicator ─────────────────── */}
       {isDraggingFile && (
@@ -1288,29 +1403,64 @@ export default function PassportPhotoPage() {
           ) : activeTab === 'edit' ? (
             /* Tab 1: Interactive Photoshop-Style Aspect-Ratio Crop & Framing */
             <div className="flex-1 flex flex-col items-center justify-between w-full max-w-4xl min-h-0 gap-2">
-              {/* Informational Header */}
-              <div className="flex items-center justify-between w-full max-w-2xl px-2 py-0.5 shrink-0">
-                <div className="flex items-center gap-2 text-xs text-surface-300">
-                  <Crop className="w-3.5 h-3.5 text-primary-400 shrink-0" />
-                  <span className="truncate">
-                    Crop Size: <strong className="text-white">{photoWidthMm} × {photoHeightMm} mm</strong>
-                  </span>
-                  <span className="hidden sm:inline text-surface-500">|</span>
-                  <span className="hidden sm:inline text-surface-400 text-[11px]">Drag box or handles to compose</span>
+              {/* Workspace Top Toolbar: View Switcher (Crop vs Live Result) & Actions */}
+              <div className="flex flex-wrap items-center justify-between w-full max-w-2xl px-2.5 py-1.5 shrink-0 bg-surface-900/85 border border-surface-800 rounded-xl gap-2 shadow-md">
+                {/* Segmented View Switcher */}
+                <div className="flex items-center gap-1 bg-surface-950 p-1 rounded-lg border border-surface-800">
+                  <button
+                    onClick={() => setEditViewMode('crop')}
+                    className={`px-3 py-1.5 text-xs font-bold rounded-md flex items-center gap-1.5 transition-all ${
+                      editViewMode === 'crop'
+                        ? 'bg-primary-600 text-white shadow-md'
+                        : 'text-surface-400 hover:text-white'
+                    }`}
+                  >
+                    <Crop className="w-3.5 h-3.5" />
+                    <span>✂️ Adjust Crop</span>
+                  </button>
+                  <button
+                    onClick={() => setEditViewMode('preview')}
+                    className={`px-3 py-1.5 text-xs font-bold rounded-md flex items-center gap-1.5 transition-all ${
+                      editViewMode === 'preview'
+                        ? 'bg-primary-600 text-white shadow-md'
+                        : 'text-surface-400 hover:text-white'
+                    }`}
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                    <span>👁️ Live Photo Result</span>
+                  </button>
                 </div>
-                <button
-                  onClick={() => setShowBiometricGuide(!showBiometricGuide)}
-                  className={`text-xs px-2.5 py-1 rounded-md flex items-center gap-1 transition-colors shrink-0 ${
-                    showBiometricGuide ? 'bg-primary-500/20 text-primary-300 border border-primary-500/40' : 'text-surface-400 hover:text-white'
-                  }`}
-                >
-                  <Eye className="w-3.5 h-3.5" />
-                  <span className="hidden xs:inline">Face Guide</span>
-                </button>
+
+                {/* Right Action: Face Guide in Crop Mode / Go to Sheet in Preview Mode */}
+                <div className="flex items-center gap-2">
+                  {editViewMode === 'crop' ? (
+                    <button
+                      onClick={() => setShowBiometricGuide(!showBiometricGuide)}
+                      className={`text-xs px-2.5 py-1 rounded-md flex items-center gap-1 transition-colors shrink-0 ${
+                        showBiometricGuide ? 'bg-primary-500/20 text-primary-300 border border-primary-500/40' : 'text-surface-400 hover:text-white'
+                      }`}
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span className="hidden xs:inline">Face Guide</span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setActiveTab('sheet');
+                        setInspectorTab('grid');
+                      }}
+                      className="text-xs px-3 py-1 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center gap-1.5 transition-colors shadow-sm"
+                    >
+                      <span>Sheet Print Layout</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
               </div>
 
-              {/* Photoshop Crop Tool Canvas Container */}
-              <div
+              {/* View Mode 1: Photoshop Crop Tool Canvas Container */}
+              {editViewMode === 'crop' && (
+                <div
                 ref={cropContainerRef}
                 className="relative rounded-lg shadow-2xl border border-surface-700 bg-surface-900 overflow-hidden flex items-center justify-center select-none cursor-crosshair h-[48vh] sm:h-[54vh] max-h-[calc(100vh-250px)] w-auto max-w-full my-auto"
                 style={{
@@ -1372,6 +1522,16 @@ export default function PassportPhotoPage() {
                   onMouseDown={(e) => startCropAction('move', e)}
                   onTouchStart={(e) => startCropAction('move', e)}
                 >
+                  {/* Visual Border Preview inside Crop Box */}
+                  {showBorder && borderWidthPx > 0 && (
+                    <div
+                      className="absolute inset-0 pointer-events-none transition-all z-10"
+                      style={{
+                        border: `${Math.max(1, Math.min(6, Math.round(borderWidthPx * 0.7)))}px solid ${borderColor}`,
+                      }}
+                    />
+                  )}
+
                   {/* Photoshop 3x3 Rule-of-Thirds Grid */}
                   <div className="absolute inset-0 pointer-events-none grid grid-cols-3 grid-rows-3">
                     <div className="border-r border-b border-white/30" />
@@ -1451,6 +1611,54 @@ export default function PassportPhotoPage() {
                   />
                 </div>
               </div>
+              )}
+
+              {/* View Mode 2: Live Full-Size Processed Photo Result Display */}
+              {editViewMode === 'preview' && (
+                <div className="relative rounded-xl shadow-2xl border border-surface-700 bg-surface-900/90 overflow-hidden flex flex-col items-center justify-center p-4 sm:p-6 my-auto max-w-full animate-fade-in">
+                  {processedPhotoDataUrl ? (
+                    <div className="relative flex flex-col items-center">
+                      <div className="relative rounded-sm shadow-2xl overflow-hidden border border-surface-700/80 bg-surface-950">
+                        <img
+                          src={processedPhotoDataUrl}
+                          alt="Live Processed Passport Photo"
+                          className="h-[46vh] sm:h-[52vh] max-h-[calc(100vh-270px)] w-auto object-contain block transition-all"
+                          style={{
+                            aspectRatio: `${photoWidthMm} / ${photoHeightMm}`,
+                          }}
+                        />
+                      </div>
+                      {/* Live Status Badges */}
+                      <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+                        <span className="text-xs text-surface-300 font-medium bg-surface-800/90 px-2.5 py-1 rounded-full border border-surface-700">
+                          📐 <strong className="text-white">{photoWidthMm}×{photoHeightMm} mm</strong>
+                        </span>
+                        <span className="text-xs text-surface-300 font-medium bg-surface-800/90 px-2.5 py-1 rounded-full border border-surface-700 flex items-center gap-1.5">
+                          <span>🖼️ Border:</span>
+                          <strong className="text-primary-300">
+                            {showBorder ? `${borderWidthPx}px (${borderWidthPx <= 1 ? 'Patla' : borderWidthPx <= 3 ? 'Medium' : borderWidthPx <= 5 ? 'Mota' : 'Heavy'})` : 'Off'}
+                          </strong>
+                          {showBorder && (
+                            <span className="w-3 h-3 rounded-full border border-white inline-block" style={{ backgroundColor: borderColor }} />
+                          )}
+                        </span>
+                        <span className="text-xs text-surface-300 font-medium bg-surface-800/90 px-2.5 py-1 rounded-full border border-surface-700 flex items-center gap-1.5">
+                          <span>🎨 Backdrop:</span>
+                          <strong className="text-primary-300">{replaceBg ? bgColor : 'Original'}</strong>
+                          {replaceBg && (
+                            <span className="w-3 h-3 rounded-full border border-white inline-block" style={{ backgroundColor: bgColor }} />
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-12 text-surface-400 gap-2">
+                      <Sparkles className="w-8 h-8 text-primary-400 animate-spin" />
+                      <span className="text-sm">Processing high-resolution photo...</span>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Bottom Quick Tools & Live Preview Card */}
               <div className="shrink-0 w-full max-w-2xl bg-surface-900/90 border border-surface-800 rounded-xl p-2 sm:p-2.5 shadow-xl flex items-center justify-between gap-2">
@@ -1479,20 +1687,21 @@ export default function PassportPhotoPage() {
                   </button>
                 </div>
 
-                {/* Right: Cropped Live Thumbnail Preview */}
+                {/* Right: Cropped Live Thumbnail Preview (Clickable to switch view) */}
                 <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-                  <div className="text-right hidden xs:block">
-                    <div className="text-[11px] font-bold text-white leading-tight">Live Result</div>
+                  <div className="text-right hidden xs:block cursor-pointer" onClick={() => setEditViewMode('preview')}>
+                    <div className="text-[11px] font-bold text-white leading-tight hover:text-primary-300 transition-colors">Live Result</div>
                     <div className="text-[10px] text-surface-400 font-mono leading-tight">{photoWidthMm}×{photoHeightMm}mm</div>
                   </div>
                   <div
-                    className="rounded border border-surface-700 overflow-hidden bg-surface-950 shadow-md shrink-0 relative flex items-center justify-center"
+                    onClick={() => setEditViewMode('preview')}
+                    className="rounded border border-surface-700 overflow-hidden bg-surface-950 shadow-md shrink-0 relative flex items-center justify-center cursor-pointer hover:border-primary-500 transition-all hover:scale-105"
                     style={{
                       width: `${Math.min(48, Math.max(28, (photoWidthMm / photoHeightMm) * 38))}px`,
                       height: '38px',
                     }}
+                    title="Click to view full Live Result"
                   >
-                    <canvas ref={editCanvasRef} className={processedPhotoDataUrl ? "hidden" : "w-full h-full block"} />
                     {processedPhotoDataUrl && (
                       <img
                         src={processedPhotoDataUrl}
@@ -1584,7 +1793,7 @@ export default function PassportPhotoPage() {
               {/* Inspector Tabs */}
               <div className="flex border-b border-surface-800/80 p-1.5 sm:p-2 gap-1 bg-surface-900/40 shrink-0">
                 <button
-                  onClick={() => { setInspectorTab('crop_size'); setActiveTab('edit'); }}
+                  onClick={() => { setInspectorTab('crop_size'); setActiveTab('edit'); setEditViewMode('crop'); }}
                   className={`flex-1 py-1.5 px-1 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-colors ${
                     inspectorTab === 'crop_size'
                       ? 'bg-primary-600/30 text-primary-300 border border-primary-500/40'
@@ -1597,7 +1806,7 @@ export default function PassportPhotoPage() {
                 </button>
 
                 <button
-                  onClick={() => { setInspectorTab('photoshop'); setActiveTab('edit'); }}
+                  onClick={() => { setInspectorTab('photoshop'); setActiveTab('edit'); setEditViewMode('preview'); }}
                   className={`flex-1 py-1.5 px-1 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-colors ${
                     inspectorTab === 'photoshop'
                       ? 'bg-primary-600/30 text-primary-300 border border-primary-500/40'
@@ -1610,7 +1819,7 @@ export default function PassportPhotoPage() {
                 </button>
 
                 <button
-                  onClick={() => { setInspectorTab('background'); setActiveTab('edit'); }}
+                  onClick={() => { setInspectorTab('background'); setActiveTab('edit'); setEditViewMode('preview'); }}
                   className={`flex-1 py-1.5 px-1 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-colors ${
                     inspectorTab === 'background'
                       ? 'bg-primary-600/30 text-primary-300 border border-primary-500/40'
